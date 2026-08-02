@@ -1339,7 +1339,16 @@
       if(m) volumeGuess = parseInt(m[1], 10);
     }
     // Título limpio para buscar en AniList (quita "Vol. X", paréntesis, etc.)
-    const cleanTitle = (bookTitle || isbn).replace(/,?\s*(?:vol(?:ume)?|tomo|t\.)\s*\.?\s*\d+.*$/i, "").trim();
+    // Título limpio para buscar la serie (quita "Vol. X", números sueltos al final,
+    // subtítulos entre paréntesis, etc.)
+    function stripVolumeNoise(t){
+      return t
+        .replace(/\s*[\(\[][^)\]]*\d[^)\]]*[\)\]]\s*$/, "") // ej. "(Naruto, #4)" al final
+        .replace(/[,:]?\s*(?:vol(?:ume)?|tomo|t\.?|book|bk\.?|#)\s*\.?\s*#?\d+.*$/i, "")
+        .replace(/\s*#?\d+\s*$/, "") // número suelto al final, con o sin '#'
+        .trim();
+    }
+    const cleanTitle = stripVolumeNoise(bookTitle || isbn) || (bookTitle || isbn);
 
     if(!bookTitle){
       const looksLikeIsbn = /^97[89]\d{10}$/.test(isbn.replace(/[^0-9]/g,""));
@@ -1352,12 +1361,21 @@
       <div class="scan-result">
         <b>${bookTitle}</b>
         ${volumeGuess ? `<span class="tag">Tomo ${volumeGuess}</span>` : ""}
-        <p class="section-sub" style="margin:6px 0 0;">Encontrado en ${source} · Buscando "${cleanTitle}" en AniList…</p>
+        <p class="section-sub" style="margin:6px 0 0;">Encontrado en ${source} · Buscando "${cleanTitle}"…</p>
       </div>
     `;
     scanResult = { title: cleanTitle, volume: volumeGuess, confidence: "high" };
     try{
-      const matches = await searchAllSources(cleanTitle);
+      let matches = await searchAllSources(cleanTitle);
+      // Si no hay resultados, reintenta con una versión aún más simplificada
+      // (solo lo que hay antes de la primera coma, dos puntos o paréntesis),
+      // por si el título traía ruido (subtítulos, ediciones, etc.).
+      if(!matches.length){
+        const shorter = cleanTitle.split(/[,:(]/)[0].trim();
+        if(shorter && shorter !== cleanTitle && shorter.length >= 2){
+          matches = await searchAllSources(shorter);
+        }
+      }
       scanMatches = matches;
       if(matches.length){
         scanSelectedMatch = matches[0];
