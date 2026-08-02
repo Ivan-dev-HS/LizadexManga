@@ -281,7 +281,18 @@
     border:1px solid var(--line); border-radius:10px; background:var(--surface-2); cursor:pointer; color:var(--text);
   }
 
-  .scan-preview{width:100%; border-radius:12px; margin:8px 0; max-height:280px; object-fit:contain; background:var(--surface-2);}
+  .camera-wrap{
+    position:relative; width:100%; aspect-ratio:4/3; border-radius:14px; overflow:hidden;
+    background:#000; margin:10px 0 6px;
+  }
+  .camera-wrap video{width:100%; height:100%; object-fit:cover; display:block;}
+  .scan-guide{
+    position:absolute; inset:22% 8%; border:2.5px solid var(--green); border-radius:12px;
+    box-shadow:0 0 0 999px rgba(0,0,0,.45);
+  }
+  .camera-hint{
+    font-family:'JetBrains Mono'; font-size:10px; color:var(--text-soft); text-align:center; margin:0 0 10px;
+  }
   .scan-result{
     border:1px solid var(--line); border-radius:12px; padding:12px; margin-top:10px; background:var(--surface-2);
   }
@@ -1083,6 +1094,7 @@
   function closeSheet(){
     openItemId = null;
     manualCoverData = null; scanResult = null; scanMatches = []; scanSelectedMatch = null;
+    stopCameraScan();
     document.getElementById("sheet").classList.remove("open");
     document.getElementById("sheetBackdrop").classList.remove("open");
     document.body.style.overflow = "";
@@ -1160,12 +1172,6 @@
   }
 
   /* ---------------- Escaneo de código de barras (ISBN) ---------------- */
-  function getBarcodePlugin(){
-    // Puente hacia el plugin nativo de escaneo (ej. @capacitor-mlkit/barcode-scanning).
-    // El nombre exacto puede variar según el plugin/versión que instales — comprobar
-    // contra su documentación antes de confiar en esto en producción.
-    return (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.BarcodeScanner) || null;
-  }
 
   function openBarcodeSheet(){
     openItemId = "barcode";
@@ -1175,38 +1181,77 @@
 
   function renderBarcodeSheet(){
     const content = document.getElementById("sheetContent");
-    const nativeOk = isNativeApp() && !!getBarcodePlugin();
     content.innerHTML = `
       <button class="sheet-close" data-action="close-sheet" aria-label="Cerrar">${icon("close",15)}</button>
       <p class="sheet-heading">Código de barras</p>
-      ${nativeOk ? `
-        <p class="section-sub" style="margin-top:0">Escanea el código de barras (ISBN) del tomo. Es el método más rápido y no consume ningún escaneo gratis.</p>
-        <div class="sheet-actions"><button class="primary" data-action="do-barcode-scan">${icon('barcode',16)} Escanear ahora</button></div>
-        <div id="barcodeArea"></div>
-      ` : `
-        <p class="section-sub" style="margin-top:0">El escáner de cámara solo funciona dentro de la app instalada en un móvil Android (no en esta vista previa). Mientras tanto puedes escribir el ISBN a mano.</p>
-        <span class="field-label">ISBN (el número bajo el código de barras)</span>
-        <input type="text" class="text-input" id="manualIsbnInput" placeholder="Ej: 9781974700642" inputmode="numeric">
-        <div class="sheet-actions"><button class="primary" data-action="lookup-manual-isbn">Buscar</button></div>
-        <div id="barcodeArea"></div>
-      `}
+      <p class="section-sub" style="margin-top:0">Apunta la cámara al código de barras (ISBN) del tomo, o escríbelo a mano si lo prefieres.</p>
+      <div class="sheet-actions"><button class="primary" data-action="start-camera-scan">${icon('camera',16)} Escanear con la cámara</button></div>
+      <div id="cameraArea"></div>
+      <span class="field-label">O escribe el ISBN a mano</span>
+      <input type="text" class="text-input" id="manualIsbnInput" placeholder="Ej: 9781974700642" inputmode="numeric">
+      <div class="sheet-actions"><button class="primary" data-action="lookup-manual-isbn">Buscar</button></div>
+      <div id="barcodeArea"></div>
     `;
   }
 
-  async function scanBarcodeNow(){
-    const plugin = getBarcodePlugin();
-    if(!plugin){ toast("El escáner de código de barras no está disponible en esta compilación."); return; }
-    const area = document.getElementById("barcodeArea");
-    try{
-      if(plugin.requestPermissions) await plugin.requestPermissions();
-      const result = await plugin.scan({ formats: ["EAN_13","EAN_8","UPC_A","UPC_E"] });
-      const barcodes = (result && result.barcodes) || [];
-      if(!barcodes.length){ toast("No se detectó ningún código."); return; }
-      const isbn = barcodes[0].rawValue || barcodes[0].displayValue || barcodes[0].value;
-      await lookupIsbn(isbn, area);
-    }catch(e){
-      toast("No se pudo escanear el código.");
+  // Lector de códigos de barras vía cámara del navegador (funciona en cualquier
+  // móvil moderno con permiso de cámara, sin depender de una app nativa compilada).
+  const ZXING_CDN = "https://unpkg.com/@zxing/browser@latest";
+  let zxingScanControls = null;
+
+  function ensureZXing(){
+    if(window.ZXingBrowser) return Promise.resolve(window.ZXingBrowser);
+    if(ensureZXing._pending) return ensureZXing._pending;
+    ensureZXing._pending = new Promise((resolve, reject)=>{
+      const s = document.createElement("script");
+      s.src = ZXING_CDN;
+      s.onload = ()=> window.ZXingBrowser ? resolve(window.ZXingBrowser) : reject(new Error("No se pudo iniciar el lector de códigos."));
+      s.onerror = ()=> reject(new Error("No se pudo cargar el lector de códigos (revisa tu conexión)."));
+      document.head.appendChild(s);
+    });
+    return ensureZXing._pending;
+  }
+
+  async function startCameraScan(){
+    const area = document.getElementById("cameraArea");
+    if(!area) return;
+    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+      toast("Este navegador no permite usar la cámara aquí.");
+      return;
     }
+    area.innerHTML = `
+      <div class="camera-wrap">
+        <video id="scanVideo" autoplay playsinline muted></video>
+        <div class="scan-guide"></div>
+      </div>
+      <p class="camera-hint">Encuadra el código de barras dentro del recuadro</p>
+      <div class="sheet-actions"><button data-action="stop-camera-scan">Cancelar</button></div>
+    `;
+    try{
+      const ZB = await ensureZXing();
+      const videoEl = document.getElementById("scanVideo");
+      if(!videoEl) return; // se canceló mientras cargaba la librería
+      const reader = new ZB.BrowserMultiFormatReader();
+      zxingScanControls = await reader.decodeFromConstraints(
+        { video: { facingMode: { ideal: "environment" } } },
+        videoEl,
+        (result)=>{
+          if(result){
+            const text = result.getText();
+            stopCameraScan();
+            lookupIsbn(text, document.getElementById("barcodeArea"));
+          }
+        }
+      );
+    }catch(e){
+      area.innerHTML = `<p class="section-sub">No se pudo acceder a la cámara (¿diste permiso en el navegador?). Puedes escribir el ISBN a mano abajo.</p>`;
+    }
+  }
+
+  function stopCameraScan(){
+    try{ if(zxingScanControls){ zxingScanControls.stop(); zxingScanControls = null; } }catch(e){}
+    const area = document.getElementById("cameraArea");
+    if(area) area.innerHTML = "";
   }
 
   function lookupManualIsbn(){
@@ -1400,7 +1445,8 @@
     }
     else if(action==="open-manual") openManualSheet();
     else if(action==="open-barcode") openBarcodeSheet();
-    else if(action==="do-barcode-scan") scanBarcodeNow();
+    else if(action==="start-camera-scan") startCameraScan();
+    else if(action==="stop-camera-scan") stopCameraScan();
     else if(action==="lookup-manual-isbn") lookupManualIsbn();
     else if(action==="isbn-to-manual") isbnToManual();
     else if(action==="manual-save") saveManualItem();
