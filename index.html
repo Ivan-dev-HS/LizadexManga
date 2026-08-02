@@ -1232,15 +1232,18 @@
       const videoEl = document.getElementById("scanVideo");
       if(!videoEl) return; // se canceló mientras cargaba la librería
       const reader = new ZB.BrowserMultiFormatReader();
+      const BOOK_FORMATS = new Set([ZB.BarcodeFormat.EAN_13, ZB.BarcodeFormat.EAN_8, ZB.BarcodeFormat.UPC_A, ZB.BarcodeFormat.UPC_E]);
       zxingScanControls = await reader.decodeFromConstraints(
         { video: { facingMode: { ideal: "environment" } } },
         videoEl,
         (result)=>{
-          if(result){
-            const text = result.getText();
-            stopCameraScan();
-            lookupIsbn(text, document.getElementById("barcodeArea"));
-          }
+          if(!result) return;
+          // Ignora códigos que no sean de tipo "libro" (por ejemplo QR promocionales
+          // u otros códigos de la contraportada) y sigue escaneando.
+          if(!BOOK_FORMATS.has(result.getBarcodeFormat())) return;
+          const text = result.getText();
+          stopCameraScan();
+          lookupIsbn(text, document.getElementById("barcodeArea"));
         }
       );
     }catch(e){
@@ -1263,12 +1266,25 @@
   async function lookupIsbn(isbn, area){
     area.innerHTML = `<div class="loading"><div class="spinner"></div>Buscando el ISBN ${isbn}…</div>`;
     let bookTitle = null;
+    let source = null;
+
     try{
       const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=isbn:${encodeURIComponent(isbn)}`);
       const data = await res.json();
       const info = data.items && data.items[0] && data.items[0].volumeInfo;
-      if(info && info.title) bookTitle = info.title + (info.subtitle ? " " + info.subtitle : "");
-    }catch(e){ /* seguimos igualmente e intentamos con el propio ISBN como término */ }
+      if(info && info.title){ bookTitle = info.title + (info.subtitle ? " " + info.subtitle : ""); source = "Google Books"; }
+    }catch(e){ /* seguimos e intentamos con la siguiente fuente */ }
+
+    // Si Google Books no lo tiene, probamos con Open Library como segunda fuente
+    // (cubre bastantes ediciones que a Google Books le faltan).
+    if(!bookTitle){
+      try{
+        const res2 = await fetch(`https://openlibrary.org/api/books?bibkeys=ISBN:${encodeURIComponent(isbn)}&format=json&jscmd=data`);
+        const data2 = await res2.json();
+        const entry = data2[`ISBN:${isbn}`];
+        if(entry && entry.title){ bookTitle = entry.title; source = "Open Library"; }
+      }catch(e){ /* seguimos igualmente */ }
+    }
 
     // Intenta extraer un número de tomo del título del libro (ej. "Vol. 12", "Tomo 3")
     let volumeGuess = null;
@@ -1280,7 +1296,8 @@
     const cleanTitle = (bookTitle || isbn).replace(/,?\s*(?:vol(?:ume)?|tomo|t\.)\s*\.?\s*\d+.*$/i, "").trim();
 
     if(!bookTitle){
-      area.innerHTML = `<div class="empty"><b>ISBN no encontrado</b>No aparece en Google Books. Puedes añadirlo a mano.</div>
+      const looksLikeIsbn = /^97[89]\d{10}$/.test(isbn.replace(/[^0-9]/g,""));
+      area.innerHTML = `<div class="empty"><b>ISBN no encontrado</b>No aparece en Google Books ni en Open Library.${looksLikeIsbn ? "" : " Este código no tiene pinta de ISBN de libro (¿quizás es otro código de la contraportada, como el de precio? prueba a escanear el otro código)."} Puedes añadirlo a mano.</div>
         <div class="sheet-actions"><button class="primary" data-action="isbn-to-manual" data-isbn="${isbn}">Añadir a mano</button></div>`;
       return;
     }
@@ -1289,7 +1306,7 @@
       <div class="scan-result">
         <b>${bookTitle}</b>
         ${volumeGuess ? `<span class="tag">Tomo ${volumeGuess}</span>` : ""}
-        <p class="section-sub" style="margin:6px 0 0;">Buscando "${cleanTitle}" en AniList…</p>
+        <p class="section-sub" style="margin:6px 0 0;">Encontrado en ${source} · Buscando "${cleanTitle}" en AniList…</p>
       </div>
     `;
     scanResult = { title: cleanTitle, volume: volumeGuess, confidence: "high" };
