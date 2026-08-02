@@ -611,6 +611,51 @@
     return data.Page.media;
   }
 
+  // Búsqueda en MangaUpdates (base de datos comunitaria centrada solo en manga/manhwa/manhua),
+  // normalizada al mismo formato que usan los resultados de AniList para poder
+  // reutilizar todo el resto del código (tarjetas, alta en biblioteca, etc.).
+  async function searchMangaUpdates(term){
+    try{
+      const res = await fetch("https://api.mangaupdates.com/v1/series/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ search: term, page: 1, perpage: 8 })
+      });
+      if(!res.ok) return [];
+      const data = await res.json();
+      const results = data.results || data.data || [];
+      return results.map(r=>{
+        const rec = r.record || r;
+        const id = rec.series_id || rec.id;
+        const title = rec.title || rec.name;
+        if(!id || !title) return null;
+        const cover = (rec.image && rec.image.url && (rec.image.url.original || rec.image.url.thumb)) || "";
+        const year = rec.year ? parseInt(rec.year, 10) : null;
+        return {
+          id: "mu-" + id,
+          title: { romaji: title, english: title, native: title },
+          coverImage: { large: cover, medium: cover },
+          status: rec.completed ? "FINISHED" : "RELEASING",
+          volumes: null,
+          chapters: null,
+          startDate: year ? { year, month: null, day: null } : null,
+          _source: "mangaupdates"
+        };
+      }).filter(Boolean);
+    }catch(e){
+      // Si MangaUpdates falla (red, CORS, formato inesperado) seguimos solo con AniList
+      // en vez de romper la búsqueda entera.
+      return [];
+    }
+  }
+
+  async function searchAllSources(term){
+    const [anilistRes, muRes] = await Promise.allSettled([searchManga(term), searchMangaUpdates(term)]);
+    const anilist = anilistRes.status==="fulfilled" ? anilistRes.value : [];
+    const mu = muRes.status==="fulfilled" ? muRes.value : [];
+    return [...anilist, ...mu];
+  }
+
   async function fetchMediaById(numericId){
     const query = `
       query ($id: Int) {
@@ -650,7 +695,7 @@
   function mediaToItem(media){
     return {
       id: String(media.id),
-      source: "anilist",
+      source: media._source || "anilist",
       title: bestTitle(media.title),
       cover: (media.coverImage && (media.coverImage.large || media.coverImage.medium)) || "",
       status: media.status,
@@ -734,7 +779,7 @@
   }
 
   async function refreshAll(){
-    const trackable = state.items.filter(i=>i.source!=="custom");
+    const trackable = state.items.filter(i=>i.source==="anilist");
     if(!trackable.length){ toast("No hay series de AniList que actualizar"); return; }
     toast("Actualizando desde AniList…");
     let updated = 0, newChapters = 0, failed = 0;
@@ -965,6 +1010,7 @@
         <div class="result-info">
           <p class="result-title">${bestTitle(media.title)}</p>
           <span class="tag" style="border-color:${itemTextColor(fakeItem)}; color:${itemTextColor(fakeItem)};">${statusLabel(media.status)}</span>
+          <span class="tag">${media._source==="mangaupdates" ? "MangaUpdates" : "AniList"}</span>
           <div class="result-actions">
             <button class="mini-btn ${inLib?'added':'solid'}" data-action="add-lib" data-id="${media.id}">${inLib?'En biblioteca ✓':'Tengo'}</button>
             <button class="mini-btn ${inWish?'added':''}" data-action="add-wish" data-id="${media.id}">${inWish?'En wishlist ✓':'Quiero'}</button>
@@ -1003,7 +1049,7 @@
     const resultsEl = document.getElementById("searchResults");
     resultsEl.innerHTML = `<div class="loading"><div class="spinner"></div>Buscando en AniList…</div>`;
     try{
-      const media = await searchManga(term);
+      const media = await searchAllSources(term);
       searchResultsCache = media;
       resultsEl.innerHTML = media.length ? media.map(resultCardHTML).join("")
         : `<div class="empty"><b>Sin resultados</b>Prueba con otro título, en su idioma original, o añádelo a mano.</div>`;
@@ -1311,7 +1357,7 @@
     `;
     scanResult = { title: cleanTitle, volume: volumeGuess, confidence: "high" };
     try{
-      const matches = await searchManga(cleanTitle);
+      const matches = await searchAllSources(cleanTitle);
       scanMatches = matches;
       if(matches.length){
         scanSelectedMatch = matches[0];
@@ -1321,7 +1367,7 @@
           row.className = "match-option" + (idx===0 ? " selected" : "");
           row.dataset.action = "select-match";
           row.dataset.idx = idx;
-          row.innerHTML = `<img src="${m.coverImage?.medium||''}" alt="" onerror="this.style.visibility='hidden'"><span>${bestTitle(m.title)}</span>`;
+          row.innerHTML = `<img src="${m.coverImage?.medium||''}" alt="" onerror="this.style.visibility='hidden'"><span>${bestTitle(m.title)}<span class="fab-choice-sub">${m._source==="mangaupdates"?"MangaUpdates":"AniList"}</span></span>`;
           list.appendChild(row);
         });
         area.appendChild(list);
