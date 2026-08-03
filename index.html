@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#FAF7F2" id="themeColorMeta">
-<title>Tomo — Mi Manga</title>
+<title>Lizadex — Mi Manga</title>
 <link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
@@ -70,7 +70,7 @@
   /* ---------- Header ---------- */
   .banner{
     position:relative;
-    padding:20px 16px 16px;
+    padding:calc(env(safe-area-inset-top) + 26px) 16px 16px;
     background:
       radial-gradient(120% 140% at 15% -10%, var(--blob-a), transparent 55%),
       radial-gradient(120% 140% at 100% 0%, var(--blob-b), transparent 55%),
@@ -144,6 +144,7 @@
   .view-toggle button.active{background:var(--text); color:var(--bg); border-color:var(--text); font-weight:700;}
 
   .shelf-view{display:flex; flex-direction:column;}
+  .shelf-unit{display:inline-block; max-width:100%;}
   .shelf-row{
     display:flex; align-items:flex-end; flex-wrap:wrap; gap:3px;
     padding:12px 6px 0;
@@ -171,7 +172,7 @@
     text-transform:uppercase;
   }
   .shelf-board{
-    height:15px; margin:0 2px 18px; border-radius:0 0 5px 5px;
+    width:100%; height:15px; margin:0 2px 18px; border-radius:0 0 5px 5px;
     background:linear-gradient(180deg, #A9713F, #6B4423);
     box-shadow:0 5px 8px -2px rgba(0,0,0,.4);
   }
@@ -473,7 +474,7 @@
 
   <div class="banner">
     <div class="banner-inner">
-      <div class="brand">TOMO<small>seguimiento de manga</small></div>
+      <div class="brand">LIZADEX<small>seguimiento de manga</small></div>
       <div class="header-actions">
         <button class="btn-icon" id="refreshBtn" title="Actualizar desde AniList" aria-label="Actualizar"></button>
         <button class="btn-icon" id="menuBtn" title="Más opciones" aria-label="Más opciones"></button>
@@ -1007,7 +1008,7 @@
     const perRow = 8;
     let html = "";
     for(let i=0; i<spines.length; i+=perRow){
-      html += `<div class="shelf-row">${spines.slice(i, i+perRow).map(spineHTML).join("")}</div><div class="shelf-board"></div>`;
+      html += `<div class="shelf-unit"><div class="shelf-row">${spines.slice(i, i+perRow).map(spineHTML).join("")}</div><div class="shelf-board"></div></div>`;
     }
     return `<p class="shelf-hint">Toca un lomo para abrir ese tomo</p>${html}`;
   }
@@ -1599,8 +1600,8 @@
       <button class="menu-item" data-action="toggle-theme">${icon(isLight ? "moon" : "sun",19)} ${isLight ? "Modo oscuro" : "Modo claro"}</button>
       <button class="menu-item" data-action="do-export">${icon("download",19)} Exportar copia de seguridad</button>
       <button class="menu-item" data-action="do-import">${icon("upload",19)} Importar copia de seguridad</button>
-      <button class="menu-item" data-action="do-about">${icon("info",19)} Acerca de Tomo</button>
-      <p class="app-version">Tomo · datos guardados solo en este dispositivo</p>
+      <button class="menu-item" data-action="do-about">${icon("info",19)} Acerca de Lizadex</button>
+      <p class="app-version">Lizadex · datos guardados solo en este dispositivo</p>
     `;
     showSheet();
   }
@@ -1609,9 +1610,9 @@
     const content = document.getElementById("sheetContent");
     content.innerHTML = `
       <button class="sheet-close" data-action="close-sheet" aria-label="Cerrar">${icon("close",15)}</button>
-      <p class="sheet-heading">Acerca de Tomo</p>
+      <p class="sheet-heading">Acerca de Lizadex</p>
       <p class="section-sub" style="margin-top:0; line-height:1.6;">
-        Tomo lleva el control de tu colección de manga: qué tienes, qué tomos has leído, qué quieres pillar y qué se anuncia próximamente. Los datos de las series vienen de AniList; tu colección se guarda solo en este dispositivo — usa "Exportar copia de seguridad" para no perderla.
+        Lizadex lleva el control de tu colección de manga: qué tienes, qué tomos has leído, qué quieres pillar y qué se anuncia próximamente. Los datos de las series vienen de AniList; tu colección se guarda solo en este dispositivo — usa "Exportar copia de seguridad" para no perderla.
       </p>
     `;
   }
