@@ -135,6 +135,50 @@
     letter-spacing:.3px; margin:-10px 2px 14px;
   }
 
+  .view-toggle{display:flex; gap:6px; margin-bottom:14px;}
+  .view-toggle button{
+    flex:1; display:flex; align-items:center; justify-content:center; gap:6px;
+    padding:9px; border-radius:10px; border:1px solid var(--line); background:var(--surface);
+    color:var(--text-soft); font-family:'JetBrains Mono'; font-size:10px; text-transform:uppercase; cursor:pointer;
+  }
+  .view-toggle button.active{background:var(--text); color:var(--bg); border-color:var(--text); font-weight:700;}
+
+  .shelf-view{display:flex; flex-direction:column;}
+  .shelf-row{
+    display:flex; align-items:flex-end; flex-wrap:wrap; gap:3px;
+    padding:12px 6px 0;
+  }
+  .spine-book{
+    position:relative; flex-shrink:0; border-radius:3px 3px 1px 1px; cursor:pointer;
+    display:flex; flex-direction:column; align-items:center; justify-content:flex-end;
+    box-shadow:inset 2px 0 0 rgba(255,255,255,.22), inset -2px 0 0 rgba(0,0,0,.22), 0 3px 6px -2px rgba(0,0,0,.35);
+    transition:transform .15s;
+  }
+  .spine-book:active{transform:scale(.95) translateY(2px);}
+  .spine-book-title{
+    flex:1; display:flex; align-items:center; justify-content:center; padding:8px 0 4px;
+    writing-mode:vertical-rl; text-orientation:mixed;
+    font-family:'Zen Kaku Gothic New'; font-weight:700; font-size:9.5px; color:rgba(255,255,255,.95);
+    text-shadow:0 1px 2px rgba(0,0,0,.35); white-space:nowrap; overflow:hidden; max-height:100%;
+  }
+  .spine-book-vol{
+    font-family:'JetBrains Mono'; font-size:8px; color:rgba(255,255,255,.95);
+    background:rgba(0,0,0,.28); border-radius:3px; padding:1px 5px; margin-bottom:5px;
+  }
+  .spine-book-edition{
+    position:absolute; top:3px; left:0; right:0; text-align:center;
+    font-family:'JetBrains Mono'; font-size:6.5px; letter-spacing:.3px; color:rgba(255,255,255,.85);
+    text-transform:uppercase;
+  }
+  .shelf-board{
+    height:15px; margin:0 2px 18px; border-radius:0 0 5px 5px;
+    background:linear-gradient(180deg, #A9713F, #6B4423);
+    box-shadow:0 5px 8px -2px rgba(0,0,0,.4);
+  }
+  .shelf-hint{
+    font-family:'JetBrains Mono'; font-size:9.5px; color:var(--text-soft); text-align:center; margin:2px 0 14px;
+  }
+
   .empty{
     text-align:center; padding:56px 22px; color:var(--text-soft);
     border:1.5px dashed var(--line); border-radius:16px;
@@ -484,7 +528,9 @@
     camera: '<path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"></path><circle cx="12" cy="13" r="3.3"></circle>',
     sun: '<circle cx="12" cy="12" r="4"></circle><line x1="12" y1="2" x2="12" y2="4"></line><line x1="12" y1="20" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="6.34" y2="6.34"></line><line x1="17.66" y1="17.66" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="4" y2="12"></line><line x1="20" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="6.34" y2="17.66"></line><line x1="17.66" y1="6.34" x2="19.07" y2="4.93"></line>',
     moon: '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>',
-    plus: '<line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line>'
+    plus: '<line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line>',
+    grid: '<rect x="3" y="3" width="7" height="7" rx="1.2"></rect><rect x="14" y="3" width="7" height="7" rx="1.2"></rect><rect x="3" y="14" width="7" height="7" rx="1.2"></rect><rect x="14" y="14" width="7" height="7" rx="1.2"></rect>',
+    shelf: '<line x1="3" y1="7" x2="21" y2="7"></line><line x1="3" y1="17" x2="21" y2="17"></line><line x1="6" y1="7" x2="6" y2="17"></line><line x1="12" y1="7" x2="12" y2="17"></line><line x1="18" y1="7" x2="18" y2="17"></line>'
   };
   function icon(name, size){
     size = size || 20;
@@ -710,6 +756,7 @@
       readCount: 0,
       manualNextDate: "",
       manualNote: "",
+      edition: "",
       newChaptersCount: 0,
       addedAt: Date.now()
     };
@@ -893,7 +940,7 @@
         <div class="poster-glow" style="border-color:${color}55;"></div>
         ${placeholder}
         ${cover}
-        ${item.source==="custom" ? `<span class="poster-custom-badge">MANUAL</span>` : ""}
+        ${item.edition ? `<span class="poster-custom-badge">${item.edition.toUpperCase()}</span>` : (item.source==="custom" ? `<span class="poster-custom-badge">MANUAL</span>` : "")}
         ${item.newChaptersCount>0 ? `<span class="poster-newchip">+${item.newChaptersCount}</span>` : ""}
         <div class="poster-scrim">
           <span class="poster-tag" style="background:${color};">${statusLabel(item.status)}</span>
@@ -914,12 +961,77 @@
 
   const EMPTY_ILLUSTRATION = `<svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path><line x1="9" y1="7" x2="15" y2="7"></line><line x1="9" y1="11" x2="14" y2="11"></line></svg>`;
 
+  const LIBRARY_VIEW_STORE = "tomo_library_view";
+  function getLibraryView(){
+    const v = localStorage.getItem(LIBRARY_VIEW_STORE);
+    return (v === "shelf" || v === "grid") ? v : "grid";
+  }
+  function setLibraryView(v){
+    localStorage.setItem(LIBRARY_VIEW_STORE, v);
+    renderActiveTabList();
+  }
+
+  function buildSpineList(items){
+    const spines = [];
+    items.forEach(item=>{
+      if(item.volumeStates){
+        item.volumeStates.forEach((s, idx)=>{ if(s>0) spines.push({ item, vol: idx+1, read: s===2 }); });
+      }else if((item.ownedCount||0) > 0){
+        for(let v=1; v<=item.ownedCount; v++) spines.push({ item, vol: v, read: v<=(item.readCount||0) });
+      }else{
+        spines.push({ item, vol: null, read: false });
+      }
+    });
+    return spines;
+  }
+
+  function spineHTML(s){
+    const item = s.item;
+    const color = itemColor(item);
+    const dark = itemColorDark(item);
+    const heightSeed = hashHue(item.title + "h" + (s.vol||0));
+    const height = 92 + (heightSeed % 55);
+    const widthSeed = hashHue(item.id + "w");
+    const width = 25 + (widthSeed % 11);
+    const shortTitle = item.title.length > 16 ? item.title.slice(0,15) + "…" : item.title;
+    return `
+      <div class="spine-book" data-open="${item.id}" style="height:${height}px; width:${width}px; background:linear-gradient(180deg, ${color}, ${dark}); ${s.read ? "" : "opacity:.8;"}">
+        ${item.edition ? `<span class="spine-book-edition">${item.edition}</span>` : ""}
+        <span class="spine-book-title">${shortTitle}</span>
+        ${s.vol ? `<span class="spine-book-vol">${s.vol}</span>` : ""}
+      </div>`;
+  }
+
+  function renderShelf(items){
+    const spines = buildSpineList(items);
+    const perRow = 8;
+    let html = "";
+    for(let i=0; i<spines.length; i+=perRow){
+      html += `<div class="shelf-row">${spines.slice(i, i+perRow).map(spineHTML).join("")}</div><div class="shelf-board"></div>`;
+    }
+    return `<p class="shelf-hint">Toca un lomo para abrir ese tomo</p>${html}`;
+  }
+
+  function libraryViewToggleHTML(){
+    const view = getLibraryView();
+    return `
+      <div class="view-toggle">
+        <button class="${view==="grid"?"active":""}" data-action="set-view" data-view="grid">${icon("grid",15)} Pósters</button>
+        <button class="${view==="shelf"?"active":""}" data-action="set-view" data-view="shelf">${icon("shelf",15)} Estantería</button>
+      </div>`;
+  }
+
   function renderLibrary(){
     const items = state.items.filter(i=>i.inLibrary);
     if(!items.length) return `<div class="empty">${EMPTY_ILLUSTRATION}<b>Tu estantería está vacía</b>Toca el botón + para buscar un manga, escanear un código de barras o añadirlo a mano.</div>`;
+    const sorted = items.sort((a,b)=>a.title.localeCompare(b.title));
+    const view = getLibraryView();
     return `<p class="section-label">Mi biblioteca <span class="count">${items.length}</span></p>
-      ${spineStripHTML(items)}
-      <div class="grid">${items.sort((a,b)=>a.title.localeCompare(b.title)).map((it,idx)=>posterHTML(it,idx)).join("")}</div>`;
+      ${libraryViewToggleHTML()}
+      ${view==="shelf"
+        ? renderShelf(sorted)
+        : `${spineStripHTML(sorted)}<div class="grid">${sorted.map((it,idx)=>posterHTML(it,idx)).join("")}</div>`}
+    `;
   }
   function renderWishlist(){
     const items = state.items.filter(i=>i.inWishlist);
@@ -1115,6 +1227,16 @@
         </div>
       </div>
       ${item.inLibrary ? volumeBlock(item) : `<p class="section-sub" style="margin-top:0;">Está en tu wishlist. Cuando la tengas, muévela a biblioteca para llevar el control de tomos.</p>`}
+      <span class="field-label">Edición (opcional)</span>
+      <input type="text" class="text-input" list="editionOptions" placeholder="Ej: Deluxe, Omnibus, Edición limitada…" value="${item.edition||""}" data-action="set-edition" data-id="${item.id}">
+      <datalist id="editionOptions">
+        <option value="Estándar"></option>
+        <option value="Deluxe"></option>
+        <option value="Omnibus"></option>
+        <option value="Kanzenban"></option>
+        <option value="Edición limitada"></option>
+        <option value="Box set"></option>
+      </datalist>
       <span class="field-label">Próximo tomo (fecha que anotes tú)</span>
       <input type="date" class="date-input" value="${item.manualNextDate||""}" data-action="set-date" data-id="${item.id}">
       <input type="text" class="note-input" style="margin-top:8px" placeholder="Nota (ej: preventa, nº de tomo…)" value="${item.manualNote||""}" data-action="set-note" data-id="${item.id}">
@@ -1205,6 +1327,7 @@
       readCount: 0,
       manualNextDate: "",
       manualNote: "",
+      edition: "",
       newChaptersCount: 0,
       addedAt: Date.now()
     };
@@ -1313,19 +1436,33 @@
     area.innerHTML = `<div class="loading"><div class="spinner"></div>Buscando el ISBN ${isbn}…</div>`;
     let bookTitle = null;
     let source = null;
+    let rateLimited = false;
 
-    try{
+    async function tryGoogleBooks(){
       const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=isbn:${encodeURIComponent(isbn)}`);
+      if(res.status === 429){ rateLimited = true; return; }
+      if(!res.ok) return;
       const data = await res.json();
       const info = data.items && data.items[0] && data.items[0].volumeInfo;
       if(info && info.title){ bookTitle = info.title + (info.subtitle ? " " + info.subtitle : ""); source = "Google Books"; }
-    }catch(e){ /* seguimos e intentamos con la siguiente fuente */ }
+    }
+
+    try{ await tryGoogleBooks(); }catch(e){ /* seguimos e intentamos con la siguiente fuente */ }
+
+    // Si nos limitó por peticiones, esperamos un segundo y lo intentamos una vez más
+    // antes de rendirnos (evita que un 429 puntual parezca un "no encontrado").
+    if(!bookTitle && rateLimited){
+      rateLimited = false;
+      await new Promise(r=>setTimeout(r, 1200));
+      try{ await tryGoogleBooks(); }catch(e){ /* seguimos igualmente */ }
+    }
 
     // Si Google Books no lo tiene, probamos con Open Library como segunda fuente
     // (cubre bastantes ediciones que a Google Books le faltan).
     if(!bookTitle){
       try{
         const res2 = await fetch(`https://openlibrary.org/api/books?bibkeys=ISBN:${encodeURIComponent(isbn)}&format=json&jscmd=data`);
+        if(res2.status === 429) rateLimited = true;
         const data2 = await res2.json();
         const entry = data2[`ISBN:${isbn}`];
         if(entry && entry.title){ bookTitle = entry.title; source = "Open Library"; }
@@ -1338,7 +1475,6 @@
       const m = bookTitle.match(/(?:vol(?:ume)?|tomo|t\.)\s*\.?\s*(\d+)/i);
       if(m) volumeGuess = parseInt(m[1], 10);
     }
-    // Título limpio para buscar en AniList (quita "Vol. X", paréntesis, etc.)
     // Título limpio para buscar la serie (quita "Vol. X", números sueltos al final,
     // subtítulos entre paréntesis, etc.)
     function stripVolumeNoise(t){
@@ -1352,7 +1488,10 @@
 
     if(!bookTitle){
       const looksLikeIsbn = /^97[89]\d{10}$/.test(isbn.replace(/[^0-9]/g,""));
-      area.innerHTML = `<div class="empty"><b>ISBN no encontrado</b>No aparece en Google Books ni en Open Library.${looksLikeIsbn ? "" : " Este código no tiene pinta de ISBN de libro (¿quizás es otro código de la contraportada, como el de precio? prueba a escanear el otro código)."} Puedes añadirlo a mano.</div>
+      const reason = rateLimited
+        ? "Los servicios de búsqueda están saturados ahora mismo — prueba de nuevo en un momento."
+        : `No aparece en Google Books ni en Open Library.${looksLikeIsbn ? "" : " Este código no tiene pinta de ISBN de libro (¿quizás es otro código de la contraportada, como el de precio? prueba a escanear el otro código)."} Si es de una editorial pequeña o especializada (algo muy típico en manga), es normal que no esté en ninguna de las dos — no es un fallo tuyo.`;
+      area.innerHTML = `<div class="empty"><b>ISBN no encontrado</b>${reason} Puedes añadirlo a mano.</div>
         <div class="sheet-actions"><button class="primary" data-action="isbn-to-manual" data-isbn="${isbn}">Añadir a mano</button></div>`;
       return;
     }
@@ -1542,6 +1681,7 @@
     else if(action==="do-import"){ document.getElementById("fileImport").click(); }
     else if(action==="do-about") showAboutSheet();
     else if(action==="toggle-theme") toggleTheme();
+    else if(action==="set-view") setLibraryView(t.dataset.view);
     else if(action==="add-via-search"){
       closeSheet();
       activeTab = "search";
@@ -1576,6 +1716,10 @@
     if(t.dataset && t.dataset.action==="set-note"){
       const item = findItem(t.dataset.id);
       if(item){ item.manualNote = t.value; saveState(); }
+    }
+    if(t.dataset && t.dataset.action==="set-edition"){
+      const item = findItem(t.dataset.id);
+      if(item){ item.edition = t.value; saveState(); renderActiveTabList(); }
     }
   });
 
