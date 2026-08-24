@@ -1,11 +1,11 @@
 {
-  "name": "Tomo — Mi Manga",
-  "short_name": "Tomo",
+  "name": "Lizadex — Mi Manga",
+  "short_name": "Lizadex",
   "description": "Seguimiento de manga: biblioteca, wishlist y próximos lanzamientos",
   "start_url": "./index.html",
   "display": "standalone",
-  "background_color": "#0B0B0F",
-  "theme_color": "#0B0B0F",
+  "background_color": "#FAF7F2",
+  "theme_color": "#FAF7F2",
   "icons": [
     { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
     { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }

@@ -31,9 +31,12 @@
     --line:#2A2A33;
     --danger:#FF5470;
     --green:#4ADE9C;
+    --green-2:#21B37A;
+    --accent-blue:#7C8CFF;
     --blob-a: rgba(74,222,156,.32);
     --blob-b: rgba(255,84,112,.3);
     --blob-c: rgba(124,140,255,.2);
+    --shadow-color: 0,0,0;
   }
   [data-theme="light"]{
     --bg:#FAF7F2;
@@ -45,9 +48,12 @@
     --line:#E6E1D6;
     --danger:#E0294A;
     --green:#0A9D63;
+    --green-2:#0C7A4E;
+    --accent-blue:#5A6EF0;
     --blob-a: rgba(14,157,104,.22);
     --blob-b: rgba(224,41,74,.2);
     --blob-c: rgba(90,110,240,.17);
+    --shadow-color: 26,20,10;
   }
   html{background:var(--bg);}
   body, .banner, .sheet, .btn-icon, .poster, .stat-chip{ transition:background-color .25s, border-color .25s, color .25s; }
@@ -84,26 +90,53 @@
     50%{ background-position:10% 15%, 90% 10%, 60% 90%, 0 0; }
   }
   .banner-inner{display:flex; align-items:center; justify-content:space-between; gap:8px;}
-  .brand{font-family:'Bebas Neue', sans-serif; font-size:38px; letter-spacing:1px; line-height:1;}
+  .brand-wrap{display:flex; align-items:center; gap:12px; min-width:0;}
+  .brand-mark{
+    width:42px; height:42px; border-radius:13px; flex-shrink:0;
+    background:linear-gradient(135deg, var(--green), var(--green-2));
+    color:#0B0B0F; display:flex; align-items:center; justify-content:center;
+    box-shadow:0 6px 16px -5px var(--green), inset 0 1px 0 rgba(255,255,255,.35);
+  }
+  .brand{font-family:'Bebas Neue', sans-serif; font-size:36px; letter-spacing:1px; line-height:1;}
   .brand small{
     display:block; font-family:'JetBrains Mono', monospace; font-size:9.5px;
-    letter-spacing:3px; color:var(--text-soft); text-transform:uppercase; margin-top:3px;
+    letter-spacing:3px; color:var(--text-soft); text-transform:uppercase; margin-top:4px;
   }
-  .header-actions{display:flex; gap:8px;}
+  .header-actions{display:flex; gap:8px; flex-shrink:0;}
   .btn-icon{
     background:var(--surface); border:1px solid var(--line); color:var(--text);
     border-radius:999px; width:40px; height:40px; font-size:17px;
     display:flex; align-items:center; justify-content:center; cursor:pointer;
+    box-shadow:0 2px 8px -3px rgba(var(--shadow-color),.3);
   }
-  .btn-icon:active{transform:scale(.94);}
+  .btn-icon:active{transform:scale(.9);}
   .btn-icon svg{display:block;}
-  .stats-row{display:flex; gap:8px; margin-top:16px; overflow-x:auto; padding-bottom:2px;}
-  .stat-chip{
-    font-family:'JetBrains Mono', monospace; font-size:10.5px; white-space:nowrap;
-    background:var(--surface); border:1px solid var(--line); border-radius:20px; padding:7px 12px;
-    color:var(--text-soft);
+  .btn-icon.spinning svg{animation:spin .7s linear infinite;}
+  .stats-row{display:flex; gap:10px; margin-top:18px; overflow-x:auto; padding-bottom:2px; scrollbar-width:none;}
+  .stats-row::-webkit-scrollbar{display:none;}
+  .stat-card{
+    position:relative; flex-shrink:0; min-width:98px; overflow:hidden;
+    background:var(--surface); border:1px solid var(--line); border-radius:16px;
+    padding:11px 13px 10px;
+    box-shadow:0 4px 14px -6px rgba(var(--shadow-color),.35);
+    animation:statIn .4s cubic-bezier(.2,.8,.2,1) backwards;
+    animation-delay:calc(var(--si, 0) * 70ms);
   }
-  .stat-chip b{color:var(--text); font-size:13px; margin-right:4px;}
+  @keyframes statIn{ from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:translateY(0);} }
+  .stat-card::before{
+    content:""; position:absolute; inset:0; opacity:.1; pointer-events:none;
+    background:var(--_accent, var(--green));
+  }
+  .stat-icon{
+    width:24px; height:24px; border-radius:8px; margin-bottom:8px;
+    background:var(--_accent, var(--green)); color:#0B0B0F;
+    display:flex; align-items:center; justify-content:center; position:relative;
+  }
+  .stat-value{font-family:'Bebas Neue', sans-serif; font-size:24px; line-height:1; position:relative;}
+  .stat-label{
+    font-family:'JetBrains Mono', monospace; font-size:8.5px; color:var(--text-soft);
+    text-transform:uppercase; letter-spacing:.3px; margin-top:3px; position:relative; white-space:nowrap;
+  }
 
   main{padding:16px 14px 8px; max-width:640px; margin:0 auto;}
   main.fade-in{animation:fadeIn .25s ease;}
@@ -111,7 +144,11 @@
 
   .section-label{
     font-family:'Bebas Neue', sans-serif; font-size:24px; letter-spacing:.4px;
-    margin:4px 2px 14px; display:flex; align-items:center; gap:8px;
+    margin:4px 2px 14px; display:flex; align-items:center; gap:9px;
+  }
+  .section-label::before{
+    content:""; width:4px; height:19px; border-radius:3px; flex-shrink:0;
+    background:linear-gradient(180deg, var(--green), var(--accent-blue));
   }
   .section-label .count{
     font-family:'JetBrains Mono', monospace; font-size:11px; color:var(--text-soft);
@@ -186,14 +223,22 @@
   }
   .empty b{display:block; color:var(--text); font-family:'Bebas Neue'; font-size:22px; margin-bottom:6px;}
   .empty svg{color:var(--line); margin-bottom:10px;}
+  .empty-cta{
+    margin:18px auto 0; display:inline-flex; align-items:center; gap:8px;
+    background:linear-gradient(135deg, var(--green), var(--green-2)); color:#0B0B0F;
+    border:none; border-radius:12px; padding:11px 18px; cursor:pointer;
+    font-family:'JetBrains Mono'; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.3px;
+    box-shadow:0 8px 20px -8px var(--green); transition:transform .15s;
+  }
+  .empty-cta:active{transform:scale(.95);}
 
   /* ---------- Poster grid ---------- */
-  .grid{display:grid; grid-template-columns:1fr 1fr; gap:12px;}
+  .grid{display:grid; grid-template-columns:1fr 1fr; gap:14px;}
   .poster{
     position:relative; border-radius:16px; overflow:hidden; cursor:pointer;
     aspect-ratio:2/3; background:var(--surface);
     border:1px solid var(--line);
-    transition:transform .2s;
+    transition:transform .2s, box-shadow .2s;
     opacity:0; animation:popIn .45s cubic-bezier(.2,.8,.2,1) forwards;
     animation-delay:calc(var(--i, 0) * 45ms);
   }
@@ -202,6 +247,13 @@
     to{ opacity:1; transform:scale(1) translateY(0); }
   }
   .poster:active{transform:scale(.96);}
+  @media (hover:hover){
+    .poster:hover{transform:translateY(-3px); box-shadow:0 14px 28px -10px rgba(var(--shadow-color),.5) !important;}
+  }
+  .poster::after{
+    content:""; position:absolute; inset:0; pointer-events:none; z-index:2;
+    background:linear-gradient(115deg, rgba(255,255,255,.16) 0%, transparent 30%);
+  }
   .poster img{position:absolute; inset:0; width:100%; height:100%; object-fit:cover; opacity:0; transition:opacity .35s ease;}
   .poster img.loaded{opacity:1;}
   .poster-placeholder{
@@ -246,13 +298,14 @@
   .sheet{
     position:fixed; left:0; right:0; bottom:0; z-index:51; max-height:88vh;
     background:var(--surface); border-radius:22px 22px 0 0; border-top:1px solid var(--line);
+    box-shadow:0 -24px 60px -24px rgba(var(--shadow-color),.55);
     transform:translateY(100%); transition:transform .28s cubic-bezier(.2,.8,.2,1);
     display:flex; flex-direction:column; padding-bottom:env(safe-area-inset-bottom);
   }
   .sheet.open{transform:translateY(0);}
   .sheet-handle{width:36px; height:4px; background:var(--line); border-radius:3px; margin:10px auto 4px;}
   .sheet-scroll{overflow-y:auto; padding:14px 18px 24px;}
-  .sheet-head{display:flex; gap:14px; margin-bottom:14px;}
+  .sheet-head{display:flex; gap:14px; margin:-14px -18px 14px; padding:20px 18px 14px; border-radius:22px 22px 0 0;}
   .sheet-title{font-weight:700; font-size:16px; line-height:1.25; margin:0 0 8px;}
   .sheet-close{
     position:absolute; top:12px; right:14px; background:var(--surface-2); border:1px solid var(--line);
@@ -311,7 +364,7 @@
     display:flex; align-items:center; justify-content:center; gap:7px;
   }
   .sheet-actions button svg{flex-shrink:0;}
-  .sheet-actions button.primary{background:var(--green); color:#0B0B0F; border-color:var(--green); font-weight:700;}
+  .sheet-actions button.primary{background:linear-gradient(135deg, var(--green), var(--green-2)); color:#0B0B0F; border-color:var(--green); font-weight:700; box-shadow:0 8px 18px -9px var(--green);}
   .sheet-actions button.danger{color:var(--danger); border-color:var(--danger);}
 
   .cover-picker{
@@ -373,18 +426,25 @@
   }
   .search-bar input::placeholder{color:var(--text-soft);}
   .search-bar button{
-    background:var(--green); color:#0B0B0F; border:none; border-radius:12px; padding:0 20px;
+    background:linear-gradient(135deg, var(--green), var(--green-2)); color:#0B0B0F; border:none; border-radius:12px; padding:0 20px;
     font-family:'Bebas Neue'; font-size:16px; letter-spacing:.5px; cursor:pointer;
+    box-shadow:0 8px 18px -9px var(--green); transition:transform .15s;
   }
+  .search-bar button:active{transform:scale(.95);}
   .fab{
     position:fixed; right:18px; bottom:calc(78px + env(safe-area-inset-bottom)); z-index:29;
-    width:56px; height:56px; border-radius:50%; border:none; cursor:pointer;
-    background:var(--green); color:#0B0B0F;
+    width:58px; height:58px; border-radius:50%; border:none; cursor:pointer;
+    background:linear-gradient(135deg, var(--green), var(--green-2)); color:#0B0B0F;
     display:flex; align-items:center; justify-content:center;
-    box-shadow:0 8px 24px -6px rgba(0,0,0,.4), 0 0 0 5px rgba(var(--bg-rgb),.85);
-    transition:transform .18s;
+    box-shadow:0 8px 24px -6px rgba(0,0,0,.4), 0 0 0 5px rgba(var(--bg-rgb),.85), 0 0 0 0 rgba(74,222,156,.5);
+    transition:transform .18s, box-shadow .18s;
+    animation:fabGlow 2.6s ease-in-out infinite;
   }
-  .fab:active{transform:scale(.92);}
+  @keyframes fabGlow{
+    0%,100%{ box-shadow:0 8px 24px -6px rgba(0,0,0,.4), 0 0 0 5px rgba(var(--bg-rgb),.85), 0 0 0 0 rgba(74,222,156,.35); }
+    50%{ box-shadow:0 8px 24px -6px rgba(0,0,0,.4), 0 0 0 5px rgba(var(--bg-rgb),.85), 0 0 14px 2px rgba(74,222,156,.25); }
+  }
+  .fab:active{transform:scale(.9);}
   .fab-choice{
     display:flex; align-items:center; gap:14px; width:100%; text-align:left;
     padding:14px 6px; border:none; border-bottom:1px solid var(--line); background:transparent;
@@ -416,7 +476,7 @@
   }
   .mini-btn:active{transform:scale(.93);}
   .mini-btn.solid{background:var(--text); color:var(--bg); border-color:var(--text); font-weight:700;}
-  .mini-btn.added{background:var(--green); border-color:var(--green); color:#0B0B0F; font-weight:700;}
+  .mini-btn.added{background:linear-gradient(135deg, var(--green), var(--green-2)); border-color:var(--green); color:#0B0B0F; font-weight:700;}
 
   .loading{text-align:center; padding:36px; font-family:'JetBrains Mono'; font-size:12px; color:var(--text-soft);}
   .spinner{
@@ -436,14 +496,19 @@
   .bottomnav button{
     background:transparent; border:none; color:var(--text-soft);
     font-family:'JetBrains Mono'; font-size:9.5px; text-transform:uppercase;
+    cursor:pointer; padding:0; position:relative; transition:color .2s;
+  }
+  .bottomnav .nav-pill{
     display:flex; flex-direction:column; align-items:center; gap:4px;
-    cursor:pointer; padding:4px 10px; position:relative; transition:color .2s;
+    padding:6px 14px 5px; border-radius:13px; transition:background-color .25s;
   }
   .bottomnav button.active{color:var(--text);}
+  .bottomnav button.active .nav-pill{background:var(--surface-2);}
   .bottomnav button.active .ic{animation:navPop .3s cubic-bezier(.3,1.5,.4,1);}
   @keyframes navPop{ 0%{transform:scale(1);} 45%{transform:scale(1.28);} 100%{transform:scale(1);} }
   .bottomnav .nav-dot{
-    position:absolute; top:0; right:2px; width:6px; height:6px; border-radius:50%; background:var(--danger);
+    position:absolute; top:0; right:6px; width:6px; height:6px; border-radius:50%; background:var(--danger);
+    box-shadow:0 0 0 2px var(--bg);
   }
 
   .menu-item{
@@ -474,7 +539,10 @@
 
   <div class="banner">
     <div class="banner-inner">
-      <div class="brand">LIZADEX<small>seguimiento de manga</small></div>
+      <div class="brand-wrap">
+        <div class="brand-mark" id="brandMark"></div>
+        <div class="brand">LIZADEX<small>seguimiento de manga</small></div>
+      </div>
       <div class="header-actions">
         <button class="btn-icon" id="refreshBtn" title="Actualizar desde AniList" aria-label="Actualizar"></button>
         <button class="btn-icon" id="menuBtn" title="Más opciones" aria-label="Más opciones"></button>
@@ -830,6 +898,8 @@
     const trackable = state.items.filter(i=>i.source==="anilist");
     if(!trackable.length){ toast("No hay series de AniList que actualizar"); return; }
     toast("Actualizando desde AniList…");
+    const refreshBtn = document.getElementById("refreshBtn");
+    if(refreshBtn) refreshBtn.classList.add("spinning");
     let updated = 0, newChapters = 0, failed = 0;
     for(const item of trackable){
       try{
@@ -849,6 +919,7 @@
     }
     saveState();
     render();
+    if(refreshBtn) refreshBtn.classList.remove("spinning");
     if(failed && !updated) toast("No se pudo conectar con AniList. Revisa tu conexión.");
     else toast(`Actualizado (${updated}) · ${newChapters} con capítulos nuevos${failed?` · ${failed} fallidos`:""}`);
   }
@@ -905,12 +976,20 @@
     const lib = state.items.filter(i=>i.inLibrary);
     const wish = state.items.filter(i=>i.inWishlist);
     const newChaps = lib.filter(i=>i.newChaptersCount>0).length;
+    const volsRead = lib.reduce((sum,i)=> sum + (i.volumeStates ? i.volumeStates.filter(s=>s===2).length : (i.readCount||0)), 0);
     const row = document.getElementById("statsRow");
-    row.innerHTML = `
-      <div class="stat-chip"><b>${lib.length}</b>en biblioteca</div>
-      <div class="stat-chip"><b>${wish.length}</b>en wishlist</div>
-      <div class="stat-chip"><b>${newChaps}</b>con capítulos nuevos</div>
-    `;
+    const cards = [
+      { icon:"book", value:lib.length, label:"En biblioteca", accent:"var(--green)" },
+      { icon:"star", value:wish.length, label:"En wishlist", accent:"var(--accent-blue)" },
+      { icon:"refresh", value:newChaps, label:"Caps. nuevos", accent:"var(--danger)" },
+      { icon:"grid", value:volsRead, label:"Tomos leídos", accent:"var(--green)" }
+    ];
+    row.innerHTML = cards.map((c,idx)=>`
+      <div class="stat-card" style="--_accent:${c.accent}; --si:${idx};">
+        <div class="stat-icon">${icon(c.icon,14)}</div>
+        <div class="stat-value">${c.value}</div>
+        <div class="stat-label">${c.label}</div>
+      </div>`).join("");
     const hasUpcomingNews = newChaps>0 || lib.some(i=>i.status==="NOT_YET_RELEASED");
     const navUpcomingBtn = document.querySelector('.bottomnav button[data-tab="upcoming"]');
     if(navUpcomingBtn){
@@ -1024,7 +1103,7 @@
 
   function renderLibrary(){
     const items = state.items.filter(i=>i.inLibrary);
-    if(!items.length) return `<div class="empty">${EMPTY_ILLUSTRATION}<b>Tu estantería está vacía</b>Toca el botón + para buscar un manga, escanear un código de barras o añadirlo a mano.</div>`;
+    if(!items.length) return `<div class="empty">${EMPTY_ILLUSTRATION}<b>Tu estantería está vacía</b>Busca un manga, escanea un código de barras o añádelo a mano.<button class="empty-cta" data-action="open-add">${icon('plus',15)} Añadir tu primer manga</button></div>`;
     const sorted = items.sort((a,b)=>a.title.localeCompare(b.title));
     const view = getLibraryView();
     return `<p class="section-label">Mi biblioteca <span class="count">${items.length}</span></p>
@@ -1036,7 +1115,7 @@
   }
   function renderWishlist(){
     const items = state.items.filter(i=>i.inWishlist);
-    if(!items.length) return `<div class="empty">${EMPTY_ILLUSTRATION}<b>Ninguna serie en espera</b>Añade aquí los manga que quieres pillar pero todavía no tienes.</div>`;
+    if(!items.length) return `<div class="empty">${EMPTY_ILLUSTRATION}<b>Ninguna serie en espera</b>Añade aquí los manga que quieres pillar pero todavía no tienes.<button class="empty-cta" data-action="open-add">${icon('plus',15)} Añadir a la wishlist</button></div>`;
     return `<p class="section-label">Wishlist <span class="count">${items.length}</span></p>
       <div class="grid">${items.sort((a,b)=>a.title.localeCompare(b.title)).map((it,idx)=>posterHTML(it,idx)).join("")}</div>`;
   }
@@ -1212,8 +1291,8 @@
     const cover = item.cover ? `<img class="cover-preview" style="width:88px;height:126px;" src="${item.cover}" alt="" onerror="this.style.display='none'">` : "";
     content.innerHTML = `
       <button class="sheet-close" data-action="close-sheet" aria-label="Cerrar">${icon("close",15)}</button>
-      <div class="sheet-head">
-        <div style="position:relative; width:88px; height:126px; flex-shrink:0; border-radius:10px; overflow:hidden;">
+      <div class="sheet-head" style="background:radial-gradient(130% 160% at 0% 0%, ${color}26, transparent 65%);">
+        <div style="position:relative; width:88px; height:126px; flex-shrink:0; border-radius:10px; overflow:hidden; box-shadow:0 10px 22px -8px ${color}88;">
           <div style="position:absolute; inset:0; background:linear-gradient(160deg, ${color}, ${dark}); display:flex; align-items:center; justify-content:center; font-family:'Bebas Neue'; font-size:17px; color:#fff;">${initials}</div>
           ${cover}
         </div>
@@ -1574,6 +1653,7 @@
 
   /* ---------------- Chrome de la app: cabecera, nav inferior y menú de opciones ---------------- */
   function initChrome(){
+    document.getElementById("brandMark").innerHTML = icon("book", 21);
     document.getElementById("refreshBtn").innerHTML = icon("refresh", 19);
     document.getElementById("menuBtn").innerHTML = icon("more", 19);
     document.getElementById("fabBtn").innerHTML = icon("plus", 24);
@@ -1586,7 +1666,7 @@
     ];
     document.querySelectorAll(".bottomnav button").forEach(btn=>{
       const def = navDefs.find(d=>d.tab===btn.dataset.tab);
-      if(def) btn.innerHTML = `<span class="ic">${icon(def.ic, 20)}</span>${def.label}`;
+      if(def) btn.innerHTML = `<span class="nav-pill"><span class="ic">${icon(def.ic, 20)}</span>${def.label}</span>`;
     });
   }
 
@@ -1692,6 +1772,7 @@
     }
     else if(action==="add-via-barcode"){ closeSheet(); openBarcodeSheet(); }
     else if(action==="add-via-manual"){ closeSheet(); openManualSheet(); }
+    else if(action==="open-add") openAddSheet();
   });
 
   document.getElementById("sheetBackdrop").addEventListener("click", closeSheet);
