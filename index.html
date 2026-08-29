@@ -801,6 +801,29 @@
     openSheet(id);
   }
 
+  // Distintas ediciones españolas de una misma serie tienen distinto nº de
+  // tomos (p. ej. la edición "3 en 1" agrupa 3 tomos originales en 1), y no
+  // hay ninguna API que nos diga ese número por edición — lo pone el usuario.
+  // Regenera el grid de tomos al nuevo tamaño conservando el progreso que
+  // quepa en los índices que coinciden.
+  function setEditionVolumes(id, newTotal){
+    const item = findItem(id);
+    if(!item) return;
+    if(!Number.isFinite(newTotal) || newTotal < 0) return;
+    item.totalVolumes = newTotal || null;
+    if(newTotal && newTotal <= 300){
+      const old = item.volumeStates || [];
+      const next = new Array(newTotal).fill(0);
+      for(let i=0; i<Math.min(old.length, newTotal); i++) next[i] = old[i];
+      item.volumeStates = next;
+    }else{
+      item.volumeStates = null;
+    }
+    saveState();
+    renderItemSheet(item);
+    renderActiveTabList();
+  }
+
   function cycleVolume(id, idx){
     const item = findItem(id);
     if(!item || !item.volumeStates) return;
@@ -1257,6 +1280,9 @@
         <option value="Edición limitada"></option>
         <option value="Box set"></option>
       </datalist>
+      <span class="field-label">Nº de tomos de esta edición</span>
+      <input type="number" min="0" max="300" class="number-input" value="${item.totalVolumes||""}" placeholder="Ej: 36 en vez de 108 si es 3 en 1" data-action="set-edition-volumes" data-id="${item.id}">
+      <p class="field-hint">Cambia este número si tu edición agrupa varios tomos en uno (3 en 1, Kanzenban…) — la app usa el dato original de AniList por defecto, que no coincide con ediciones especiales.</p>
       <div class="sheet-actions" style="margin-top:8px;">
         <button data-action="open-listadomanga" data-id="${item.id}">${icon("search",15)} Ediciones ES en Listado Manga</button>
       </div>
@@ -1753,6 +1779,9 @@
     if(t.dataset && t.dataset.action==="set-date"){
       const item = findItem(t.dataset.id);
       if(item){ item.manualNextDate = t.value; saveState(); if(activeTab==="upcoming") renderActiveTabList(); }
+    }
+    if(t.dataset && t.dataset.action==="set-edition-volumes"){
+      setEditionVolumes(t.dataset.id, parseInt(t.value, 10));
     }
   });
   document.addEventListener("input", (e)=>{
