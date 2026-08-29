@@ -1496,7 +1496,7 @@
     if(!tracked.length) return html + `<div class="empty">${EMPTY_ILLUSTRATION}<b>Nada que mostrar todavía</b>Añade series a tu biblioteca o wishlist para ver aquí sus novedades.</div>`;
 
     if(readyForPickup.length){
-      html += `<p class="section-label" style="font-size:17px;">Listos para recoger</p>`;
+      html += `<p class="section-label" style="font-size:17px;">Tienda</p>`;
       html += readyForPickup.map(i => `
         <div class="up-item" style="--_accent:var(--green)">${upThumb(i)}
           <div style="flex:1">
