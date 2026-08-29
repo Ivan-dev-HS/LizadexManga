@@ -1472,9 +1472,6 @@
 
     let html = `<p class="section-label">Próximos lanzamientos</p>`;
     html += `<p class="section-sub">AniList no da fechas exactas de tomo físico para series en curso — aquí verás series anunciadas sin publicar, capítulos ya salidos que aún no has leído, y puedes anotar tú la fecha de un próximo tomo físico.</p>`;
-    html += `<div class="sheet-actions" style="margin:0 0 18px;">
-      <button data-action="open-calendario-lm">${icon("calendar",15)} Ver calendario de Listado Manga</button>
-    </div>`;
 
     if(!tracked.length) return html + `<div class="empty">${EMPTY_ILLUSTRATION}<b>Nada que mostrar todavía</b>Añade series a tu biblioteca o wishlist para ver aquí sus novedades.</div>`;
 
@@ -2130,9 +2127,6 @@
       clearGeminiKey();
       toast("Clave de Gemini eliminada");
       openMenuSheet();
-    }
-    else if(action==="open-calendario-lm"){
-      window.open("https://www.listadomanga.es/calendario.php", "_blank", "noopener");
     }
     else if(action==="fallback-ocr"){
       if(pendingShelfFile) processShelfPhoto(pendingShelfFile);
