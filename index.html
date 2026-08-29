@@ -321,9 +321,10 @@
     width:64px; height:92px; border-radius:8px; object-fit:cover; background:var(--surface-2);
     border:1px solid var(--line);
   }
-  .cover-picker label.upload-btn{
+  .upload-btn{
     font-family:'JetBrains Mono'; font-size:10px; text-transform:uppercase; padding:8px 12px;
     border:1px solid var(--line); border-radius:10px; background:var(--surface-2); cursor:pointer; color:var(--text);
+    display:inline-flex; align-items:center; justify-content:center; gap:7px;
   }
 
   .camera-wrap{
@@ -467,7 +468,7 @@
   }
   .toast.show{opacity:1; bottom:114px;}
 
-  #fileImport, #manualCoverInput{display:none;}
+  #fileImport, #manualCoverInput, #shelfPhotoInput{display:none;}
 </style>
 </head>
 <body>
@@ -502,6 +503,7 @@
 
   <input type="file" id="fileImport" accept=".json">
   <input type="file" id="manualCoverInput" accept="image/*">
+  <input type="file" id="shelfPhotoInput" accept="image/*">
 
   <div class="toast" id="toast"></div>
 
@@ -543,6 +545,7 @@
   let activeTab = "library";
   let openItemId = null;
   let manualCoverData = null;   // dataURL pendiente para el alta manual
+  let coverUploadTargetId = null; // id del item cuya portada se está reemplazando (null = alta manual)
   let scanResult = null;        // {title, volume, confidence} tras leer un ISBN
   let scanMatches = [];         // resultados de AniList tras la búsqueda
   let scanSelectedMatch = null;
@@ -800,6 +803,29 @@
     openSheet(id);
   }
 
+  // Distintas ediciones españolas de una misma serie tienen distinto nº de
+  // tomos (p. ej. la edición "3 en 1" agrupa 3 tomos originales en 1), y no
+  // hay ninguna API que nos diga ese número por edición — lo pone el usuario.
+  // Regenera el grid de tomos al nuevo tamaño conservando el progreso que
+  // quepa en los índices que coinciden.
+  function setEditionVolumes(id, newTotal){
+    const item = findItem(id);
+    if(!item) return;
+    if(!Number.isFinite(newTotal) || newTotal < 0) return;
+    item.totalVolumes = newTotal || null;
+    if(newTotal && newTotal <= 300){
+      const old = item.volumeStates || [];
+      const next = new Array(newTotal).fill(0);
+      for(let i=0; i<Math.min(old.length, newTotal); i++) next[i] = old[i];
+      item.volumeStates = next;
+    }else{
+      item.volumeStates = null;
+    }
+    saveState();
+    renderItemSheet(item);
+    renderActiveTabList();
+  }
+
   function cycleVolume(id, idx){
     const item = findItem(id);
     if(!item || !item.volumeStates) return;
@@ -872,6 +898,365 @@
       img.onerror = reject;
       reader.readAsDataURL(file);
     });
+  }
+
+  /* ---------------- Escaneo de estantería (foto -> varios mangas) ---------------- */
+  // Dos formas de detectar mangas en una foto:
+  //  - Sin clave: OCR 100% en el propio móvil (Tesseract.js), gratis pero
+  //    limitado (lee letras sueltas, no "entiende" la foto).
+  //  - Con clave de Gemini (gratuita, la pone el usuario en Ajustes): IA de
+  //    visión de verdad, que reconoce los mangas aunque el texto esté en
+  //    ángulo, parcialmente tapado o sea un logo estilizado.
+  // En ambos casos se muestra todo para que el usuario confirme antes de
+  // añadir -nunca se añade nada a ciegas, porque ninguna de las dos vías es
+  // infalible.
+  const TESSERACT_CDN = "https://unpkg.com/tesseract.js@5/dist/tesseract.min.js";
+  const GEMINI_KEY_STORE = "tomo_gemini_key";
+  const GEMINI_MODEL = "gemini-3.6-flash";
+  let shelfScanMatches = [];
+  let pendingShelfFile = null;
+
+  function getGeminiKey(){ return (localStorage.getItem(GEMINI_KEY_STORE) || "").trim(); }
+  function saveGeminiKey(key){ localStorage.setItem(GEMINI_KEY_STORE, key.trim()); }
+  function clearGeminiKey(){ localStorage.removeItem(GEMINI_KEY_STORE); }
+
+  async function analyzeShelfWithGemini(file, apiKey){
+    const dataUrl = await resizeImageFile(file, 1600, 0.85);
+    const base64 = dataUrl.split(",")[1];
+    const prompt = "Estás viendo una foto de una estantería, pila o mesa con manga o cómics. "
+      + "Identifica cada título de manga o cómic que reconozcas, por el lomo o la portada, "
+      + "aunque el texto esté en vertical, en ángulo, parcialmente tapado por otro objeto o sea "
+      + "un logo estilizado. Devuelve ÚNICAMENTE un array JSON de strings con los títulos "
+      + "detectados (el nombre más reconocible internacionalmente, sin el número de tomo ni la "
+      + "editorial). No incluyas nada más en la respuesta, ni explicaciones ni markdown. Si no "
+      + "reconoces ninguno, devuelve [].";
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [ { text: prompt }, { inline_data: { mime_type: "image/jpeg", data: base64 } } ] }],
+        generationConfig: { responseMimeType: "application/json" }
+      })
+    });
+    if(!res.ok){
+      const errBody = await res.json().catch(()=>null);
+      throw new Error((errBody && errBody.error && errBody.error.message) || `Error ${res.status} de Gemini`);
+    }
+    const data = await res.json();
+    const part = data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts[0];
+    const text = part && part.text;
+    if(!text) throw new Error("Gemini no ha devuelto ningún texto (¿foto bloqueada por el filtro de seguridad?)");
+    const cleaned = text.trim().replace(/^```json\s*/i, "").replace(/^```\s*/, "").replace(/```\s*$/, "");
+    let titles;
+    try{ titles = JSON.parse(cleaned); }catch(e){ throw new Error("No se pudo interpretar la respuesta de Gemini"); }
+    if(!Array.isArray(titles)) throw new Error("Formato de respuesta inesperado de Gemini");
+    return titles.filter(t=>typeof t==="string" && t.trim()).map(t=>t.trim()).slice(0, 20);
+  }
+
+  async function runShelfScan(file){
+    pendingShelfFile = file;
+    const key = getGeminiKey();
+    if(!key){ await processShelfPhoto(file); return; }
+    const area = document.getElementById("shelfScanArea");
+    if(!area) return;
+    area.innerHTML = `<div class="loading"><div class="spinner"></div>Analizando la foto con Gemini…</div>`;
+    try{
+      const titles = await analyzeShelfWithGemini(file, key);
+      if(!titles.length){
+        area.innerHTML = `<div class="empty"><b>Gemini no ha reconocido ningún título</b>Prueba con otra foto, con menos objetos alrededor de los mangas.</div>`;
+        return;
+      }
+      area.innerHTML = `<div class="loading"><div class="spinner"></div>Buscando ${titles.length} título(s) detectados…</div>`;
+      const matches = await Promise.all(titles.map(async line=>{
+        const results = await searchAllSources(line).catch(()=>[]);
+        return { line, best: results[0]||null, hasMatch: results.length>0 };
+      }));
+      renderShelfScanResults(matches);
+    }catch(e){
+      area.innerHTML = `<div class="empty"><b>No se pudo usar Gemini</b>${escapeHtml((e&&e.message)||"Error desconocido")}. Revisa tu clave en Ajustes.
+        <div class="sheet-actions" style="margin-top:12px;"><button data-action="fallback-ocr">Probar con OCR gratis en su lugar</button></div>
+      </div>`;
+    }
+  }
+
+  function ensureTesseract(){
+    if(window.Tesseract) return Promise.resolve(window.Tesseract);
+    if(ensureTesseract._pending) return ensureTesseract._pending;
+    ensureTesseract._pending = new Promise((resolve, reject)=>{
+      const s = document.createElement("script");
+      s.src = TESSERACT_CDN;
+      s.onload = ()=> window.Tesseract ? resolve(window.Tesseract) : reject(new Error("No se pudo iniciar el lector de texto."));
+      s.onerror = ()=> reject(new Error("No se pudo cargar el lector de texto (revisa tu conexión)."));
+      document.head.appendChild(s);
+    });
+    return ensureTesseract._pending;
+  }
+
+  function openShelfScanSheet(){
+    openItemId = "shelfscan";
+    shelfScanMatches = [];
+    const content = document.getElementById("sheetContent");
+    content.innerHTML = `
+      <button class="sheet-close" data-action="close-sheet" aria-label="Cerrar">${icon("close",15)}</button>
+      <p class="sheet-heading">Foto de la estantería</p>
+      <p class="section-sub" style="margin-top:0">Haz una foto a los lomos de varios mangas (o elige una que ya tengas). ${getGeminiKey()
+        ? "Se analizará con Gemini (tu clave, configurada en Ajustes) para mejor precisión."
+        : 'Se leerá el texto con OCR gratuito en tu propio móvil. Para mejor precisión, añade tu clave gratuita de Gemini en el menú "Más opciones".'}</p>
+      <div class="sheet-actions">
+        <label class="upload-btn" for="shelfPhotoInput" style="flex:1; padding:12px; font-size:11px;">${icon("camera",16)} Elegir o hacer una foto</label>
+      </div>
+      <div id="shelfScanArea"></div>
+    `;
+    document.getElementById("shelfPhotoInput").value = "";
+    showSheet();
+  }
+
+  function extractCandidateLines(text){
+    const lines = (text||"").split(/\n+/)
+      .map(l=>l.replace(/[^\p{L}\p{N}\s:.'-]/gu, " ").replace(/\s+/g, " ").trim())
+      .filter(l=> l.length>=3 && /[a-zA-ZÀ-ɏ]{3,}/.test(l))
+      .filter(l=> !/^(vol(?:umen|ume)?|tomo|t\.?|n[ºo]?\.?|cap(?:itulo)?|\d+)$/i.test(l));
+    const seen = new Set();
+    const out = [];
+    for(const l of lines){
+      const key = l.toLowerCase();
+      if(seen.has(key)) continue;
+      seen.add(key);
+      out.push(l);
+      if(out.length>=10) break; // limita las búsquedas para no saturar AniList/MangaUpdates
+    }
+    return out;
+  }
+
+  // Dibuja la imagen rotada en un canvas y devuelve el nuevo dataURL. Los
+  // lomos de manga casi siempre llevan el texto en vertical (el libro está
+  // de pie en la estantería), así que una sola pasada de OCR "tal cual"
+  // nunca los va a leer bien -hay que probar también girado.
+  function rotateDataUrl(dataUrl, degrees){
+    return new Promise((resolve, reject)=>{
+      const img = new Image();
+      img.onload = () => {
+        const swap = degrees===90 || degrees===270;
+        const canvas = document.createElement("canvas");
+        canvas.width = swap ? img.height : img.width;
+        canvas.height = swap ? img.width : img.height;
+        const ctx = canvas.getContext("2d");
+        ctx.translate(canvas.width/2, canvas.height/2);
+        ctx.rotate(degrees * Math.PI/180);
+        ctx.drawImage(img, -img.width/2, -img.height/2);
+        resolve(canvas.toDataURL("image/jpeg", 0.92));
+      };
+      img.onerror = reject;
+      img.src = dataUrl;
+    });
+  }
+
+  async function processShelfPhoto(file){
+    const area = document.getElementById("shelfScanArea");
+    if(!area) return;
+    area.innerHTML = `<div class="loading"><div class="spinner"></div>Leyendo texto de la imagen…</div>`;
+    let worker = null;
+    try{
+      const Tesseract = await ensureTesseract();
+      const baseDataUrl = await resizeImageFile(file, 1800, 0.92);
+      worker = await Tesseract.createWorker("spa+eng");
+      // "Sparse text": busca texto suelto sin asumir que la imagen es una
+      // página de párrafos -mucho más parecido a una foto de estantería
+      // que al modo de página completa que usa por defecto.
+      await worker.setParameters({ tessedit_pageseg_mode: "11" });
+      const angles = [0, 90, 270]; // normal, y girada en los dos sentidos
+      let combinedText = "";
+      for(let i=0; i<angles.length; i++){
+        const box = area.querySelector(".loading");
+        if(box) box.innerHTML = `<div class="spinner"></div>Leyendo texto de la imagen… (probando orientación ${i+1}/${angles.length})`;
+        const rotated = angles[i]===0 ? baseDataUrl : await rotateDataUrl(baseDataUrl, angles[i]);
+        const { data } = await worker.recognize(rotated);
+        combinedText += "\n" + (data.text||"");
+      }
+      await worker.terminate();
+      worker = null;
+      const lines = extractCandidateLines(combinedText);
+      if(!lines.length){
+        area.innerHTML = `<div class="empty"><b>No se ha podido leer texto</b>Prueba con más luz, más cerca (menos lomos por foto) y evita que se vean torcidos. Con estanterías muy llenas el OCR gratuito falla bastante -si esto sigue sin ir bien, se puede cambiar a detección por IA de visión con tu propia clave gratuita.</div>`;
+        return;
+      }
+      area.innerHTML = `<div class="loading"><div class="spinner"></div>Buscando ${lines.length} título(s) detectados…</div>`;
+      const matches = await Promise.all(lines.map(async line=>{
+        const results = await searchAllSources(line).catch(()=>[]);
+        return { line, best: results[0]||null, hasMatch: results.length>0 };
+      }));
+      renderShelfScanResults(matches, combinedText);
+    }catch(e){
+      if(worker){ try{ await worker.terminate(); }catch(e2){} }
+      area.innerHTML = `<p class="section-sub">No se pudo leer la imagen (${(e&&e.message)||"error desconocido"}). Puedes añadir los mangas a mano o probar con otra foto.</p>`;
+    }
+  }
+
+  function escapeHtml(str){
+    return String(str||"").replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  }
+
+  function rawOcrDetails(rawText){
+    if(!rawText || !rawText.trim()) return "";
+    return `<details style="margin:10px 2px 0;">
+      <summary class="field-hint" style="cursor:pointer;">Ver el texto crudo que ha leído el OCR</summary>
+      <pre style="white-space:pre-wrap; font-family:'JetBrains Mono'; font-size:9.5px; color:var(--text-soft); margin:6px 0 0; max-height:160px; overflow-y:auto;">${escapeHtml(rawText.trim())}</pre>
+    </details>`;
+  }
+
+  function renderShelfScanResults(matches, rawText){
+    shelfScanMatches = matches;
+    const area = document.getElementById("shelfScanArea");
+    if(!area) return;
+    const withMatch = matches.filter(m=>m.hasMatch);
+    if(!withMatch.length){
+      area.innerHTML = `<div class="empty"><b>No se ha reconocido ningún título</b>El texto leído no coincide con ningún manga en AniList/MangaUpdates. Prueba con otra foto (menos lomos, más luz) o añade a mano.</div>${rawOcrDetails(rawText)}`;
+      return;
+    }
+    area.innerHTML = `
+      <p class="field-hint" style="margin:12px 2px 8px;">${withMatch.length} de ${matches.length} línea(s) leídas coinciden con algún manga. Revisa y desmarca los que no sean correctos antes de añadir.</p>
+      ${matches.map((m,idx)=> m.hasMatch ? `
+        <label class="match-option selected" style="cursor:pointer;">
+          <input type="checkbox" data-shelf-idx="${idx}" checked>
+          ${m.best.coverImage && m.best.coverImage.medium ? `<img src="${m.best.coverImage.medium}" alt="" onerror="this.style.visibility='hidden'">` : `<div style="width:38px;height:54px;background:var(--surface-2);border-radius:5px;flex-shrink:0;"></div>`}
+          <span>${bestTitle(m.best.title)}<span class="fab-choice-sub">Leído en la foto: "${m.line}"</span></span>
+        </label>` : `
+        <div class="match-option" style="opacity:.5;">
+          <div style="width:38px;height:54px;background:var(--surface-2);border-radius:5px;flex-shrink:0;"></div>
+          <span>Sin coincidencias<span class="fab-choice-sub">Leído en la foto: "${m.line}"</span></span>
+        </div>`
+      ).join("")}
+      <div class="sheet-actions" style="margin-top:14px;">
+        <button class="primary" data-action="confirm-shelf-scan">Añadir seleccionados a biblioteca</button>
+      </div>
+      ${rawOcrDetails(rawText)}
+    `;
+  }
+
+  function confirmShelfScan(){
+    const checked = document.querySelectorAll('#shelfScanArea input[type="checkbox"]:checked');
+    let added = 0;
+    checked.forEach(cb=>{
+      const m = shelfScanMatches[Number(cb.dataset.shelfIdx)];
+      if(!m || !m.best) return;
+      let item = findItem(String(m.best.id));
+      if(!item){ item = mediaToItem(m.best); state.items.push(item); }
+      item.inLibrary = true;
+      added++;
+    });
+    saveState();
+    closeSheet();
+    if(added){
+      activeTab = "library";
+      document.querySelectorAll(".bottomnav button").forEach(b=>b.classList.toggle("active", b.dataset.tab===activeTab));
+    }
+    render();
+    toast(added ? `${added} manga(s) añadido(s) desde la foto` : "No se seleccionó ninguno");
+  }
+
+  /* ---------------- Búsqueda de ediciones españolas ---------------- */
+  // No existe ninguna API de listadomanga.es (ni CORS abierto para leer su
+  // HTML), así que en vez de enlazar hacia allí, buscamos ediciones reales
+  // en dos catálogos de libros con API pública y CORS abierto —los mismos
+  // que ya usa el escaneo de ISBN más abajo—: Google Books y Open Library.
+  // Ambos indexan catálogos comerciales por idioma/editorial, así que para
+  // series populares suelen sacar varias ediciones distintas (normal, 3 en
+  // 1, kanzenban...) cada una con su propia portada real.
+  let editionSearchResults = [];
+
+  function fixHttps(url){
+    return url ? url.replace(/^http:\/\//, "https://") : url;
+  }
+
+  async function searchGoogleBooksEditions(title){
+    try{
+      const q = encodeURIComponent(`intitle:${title}`);
+      const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${q}&langRestrict=es&maxResults=20`);
+      if(!res.ok) return [];
+      const data = await res.json();
+      return (data.items||[]).map(it=>{
+        const v = it.volumeInfo || {};
+        if(!v.title) return null;
+        return {
+          title: v.subtitle ? `${v.title} ${v.subtitle}` : v.title,
+          publisher: v.publisher || "",
+          year: v.publishedDate ? v.publishedDate.slice(0,4) : "",
+          cover: v.imageLinks ? fixHttps(v.imageLinks.thumbnail || v.imageLinks.smallThumbnail) : "",
+          source: "Google Books"
+        };
+      }).filter(Boolean);
+    }catch(e){ return []; }
+  }
+
+  async function searchOpenLibraryEditions(title){
+    try{
+      const res = await fetch(`https://openlibrary.org/search.json?q=${encodeURIComponent(title)}&language=spa&limit=15`);
+      if(!res.ok) return [];
+      const data = await res.json();
+      return (data.docs||[]).map(d=>{
+        if(!d.title) return null;
+        return {
+          title: d.title,
+          publisher: (d.publisher && d.publisher[0]) || "",
+          year: d.first_publish_year || "",
+          cover: d.cover_i ? `https://covers.openlibrary.org/b/id/${d.cover_i}-M.jpg` : "",
+          source: "Open Library"
+        };
+      }).filter(Boolean);
+    }catch(e){ return []; }
+  }
+
+  function dedupeEditions(results){
+    const seen = new Set();
+    return results.filter(r=>{
+      const key = r.title.toLowerCase().trim() + "|" + r.publisher.toLowerCase().trim();
+      if(seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }
+
+  async function runEditionSearch(id){
+    const item = findItem(id);
+    const area = document.getElementById("editionSearchArea");
+    if(!item || !area) return;
+    area.innerHTML = `<div class="loading"><div class="spinner"></div>Buscando ediciones de "${item.title}"…</div>`;
+    const [gb, ol] = await Promise.allSettled([
+      searchGoogleBooksEditions(item.title),
+      searchOpenLibraryEditions(item.title)
+    ]);
+    const results = dedupeEditions([
+      ...(gb.status==="fulfilled" ? gb.value : []),
+      ...(ol.status==="fulfilled" ? ol.value : [])
+    ]);
+    editionSearchResults = results;
+    if(!results.length){
+      area.innerHTML = `<p class="section-sub">No se han encontrado ediciones en castellano en Google Books ni Open Library. Puedes seguir subiendo tú la portada a mano con "Cambiar portada".</p>`;
+      return;
+    }
+    area.innerHTML = `<p class="field-hint" style="margin:10px 2px 6px;">${results.length} edición(es) encontradas · toca una para usar su portada y su nombre como edición</p>` +
+      results.map((r,idx)=>`
+        <div class="match-option" data-action="apply-edition" data-id="${item.id}" data-idx="${idx}">
+          ${r.cover ? `<img src="${r.cover}" alt="" onerror="this.style.visibility='hidden'">` : `<div style="width:38px;height:54px;background:var(--surface-2);border-radius:5px;flex-shrink:0;"></div>`}
+          <span>${r.title}<span class="fab-choice-sub">${[r.publisher, r.year, r.source].filter(Boolean).join(" · ")}</span></span>
+        </div>`).join("");
+  }
+
+  function applyEditionResult(id, idx){
+    const item = findItem(id);
+    const r = editionSearchResults[idx];
+    if(!item || !r) return;
+    if(r.cover) item.cover = r.cover;
+    let edition = r.title;
+    const base = item.title.toLowerCase();
+    if(edition.toLowerCase().startsWith(base)){
+      edition = edition.slice(item.title.length).replace(/^[\s,:\-–—]+/, "");
+    }
+    if(edition) item.edition = edition.slice(0, 60);
+    saveState();
+    renderItemSheet(item);
+    renderActiveTabList();
+    toast("Edición aplicada");
   }
 
   /* ---------------- Export / Import ---------------- */
@@ -1209,7 +1594,7 @@
     const color = itemColor(item);
     const dark = itemColorDark(item);
     const initials = initialsOf(item.title);
-    const cover = item.cover ? `<img class="cover-preview" style="width:88px;height:126px;" src="${item.cover}" alt="" onerror="this.style.display='none'">` : "";
+    const cover = item.cover ? `<img class="cover-preview" style="position:absolute; inset:0; width:88px;height:126px;" src="${item.cover}" alt="" onerror="this.style.display='none'">` : "";
     content.innerHTML = `
       <button class="sheet-close" data-action="close-sheet" aria-label="Cerrar">${icon("close",15)}</button>
       <div class="sheet-head">
@@ -1227,17 +1612,28 @@
           ${item.newChaptersCount>0 ? `<button class="newchap" data-action="dismiss-chap" data-id="${item.id}">+${item.newChaptersCount} caps. nuevos · marcar visto</button>` : ""}
         </div>
       </div>
+      <div class="sheet-actions" style="margin:0 0 14px;">
+        <button data-action="pick-cover" data-id="${item.id}">${icon("camera",15)} Cambiar portada</button>
+      </div>
       ${item.inLibrary ? volumeBlock(item) : `<p class="section-sub" style="margin-top:0;">Está en tu wishlist. Cuando la tengas, muévela a biblioteca para llevar el control de tomos.</p>`}
       <span class="field-label">Edición (opcional)</span>
-      <input type="text" class="text-input" list="editionOptions" placeholder="Ej: Deluxe, Omnibus, Edición limitada…" value="${item.edition||""}" data-action="set-edition" data-id="${item.id}">
+      <input type="text" class="text-input" list="editionOptions" placeholder="Ej: Deluxe, Omnibus, 3 en 1, Edición limitada…" value="${item.edition||""}" data-action="set-edition" data-id="${item.id}">
       <datalist id="editionOptions">
         <option value="Estándar"></option>
         <option value="Deluxe"></option>
         <option value="Omnibus"></option>
+        <option value="3 en 1"></option>
         <option value="Kanzenban"></option>
         <option value="Edición limitada"></option>
         <option value="Box set"></option>
       </datalist>
+      <span class="field-label">Nº de tomos de esta edición</span>
+      <input type="number" min="0" max="300" class="number-input" value="${item.totalVolumes||""}" placeholder="Ej: 36 en vez de 108 si es 3 en 1" data-action="set-edition-volumes" data-id="${item.id}">
+      <p class="field-hint">Cambia este número si tu edición agrupa varios tomos en uno (3 en 1, Kanzenban…) — la app usa el dato original de AniList por defecto, que no coincide con ediciones especiales.</p>
+      <div class="sheet-actions" style="margin-top:8px;">
+        <button data-action="find-editions" data-id="${item.id}">${icon("search",15)} Buscar ediciones ES (Google Books)</button>
+      </div>
+      <div id="editionSearchArea"></div>
       <span class="field-label">Próximo tomo (fecha que anotes tú)</span>
       <input type="date" class="date-input" value="${item.manualNextDate||""}" data-action="set-date" data-id="${item.id}">
       <input type="text" class="note-input" style="margin-top:8px" placeholder="Nota (ej: preventa, nº de tomo…)" value="${item.manualNote||""}" data-action="set-note" data-id="${item.id}">
@@ -1262,7 +1658,7 @@
   }
   function closeSheet(){
     openItemId = null;
-    manualCoverData = null; scanResult = null; scanMatches = []; scanSelectedMatch = null;
+    manualCoverData = null; coverUploadTargetId = null; scanResult = null; scanMatches = []; scanSelectedMatch = null; shelfScanMatches = [];
     stopCameraScan();
     document.getElementById("sheet").classList.remove("open");
     document.getElementById("sheetBackdrop").classList.remove("open");
@@ -1601,6 +1997,13 @@
       <button class="menu-item" data-action="do-export">${icon("download",19)} Exportar copia de seguridad</button>
       <button class="menu-item" data-action="do-import">${icon("upload",19)} Importar copia de seguridad</button>
       <button class="menu-item" data-action="do-about">${icon("info",19)} Acerca de Lizadex</button>
+      <span class="field-label" style="margin-top:18px;">Clave de Gemini (opcional)</span>
+      <input type="password" class="text-input" id="geminiKeyInput" placeholder="Pega aquí tu clave de aistudio.google.com" value="${getGeminiKey()}" autocomplete="off">
+      <p class="field-hint">Se guarda solo en este dispositivo y se usa directamente desde tu navegador hacia Google — nunca pasa por ningún servidor nuestro. Con ella, "Foto de la estantería" usa IA de visión (mucha mejor precisión). Sin clave, sigue funcionando con lectura de texto (OCR) gratuita. Consíguela gratis en aistudio.google.com/apikey.</p>
+      <div class="sheet-actions">
+        <button class="primary" data-action="save-gemini-key">Guardar clave</button>
+        ${getGeminiKey() ? `<button class="danger" data-action="clear-gemini-key">Quitar clave</button>` : ""}
+      </div>
       <p class="app-version">Lizadex · datos guardados solo en este dispositivo</p>
     `;
     showSheet();
@@ -1630,6 +2033,10 @@
       <button class="fab-choice" data-action="add-via-barcode">
         <span class="fab-choice-ic">${icon("barcode",19)}</span>
         <span>Código de barras<span class="fab-choice-sub">Escanea el ISBN del tomo físico</span></span>
+      </button>
+      <button class="fab-choice" data-action="add-via-shelfscan">
+        <span class="fab-choice-ic">${icon("shelf",19)}</span>
+        <span>Foto de la estantería<span class="fab-choice-sub">Detecta varios mangas a la vez leyendo los lomos (OCR, en tu móvil)</span></span>
       </button>
       <button class="fab-choice" data-action="add-via-manual">
         <span class="fab-choice-ic">${icon("pencil",19)}</span>
@@ -1681,6 +2088,28 @@
     else if(action==="do-export"){ exportData(); closeSheet(); }
     else if(action==="do-import"){ document.getElementById("fileImport").click(); }
     else if(action==="do-about") showAboutSheet();
+    else if(action==="save-gemini-key"){
+      const input = document.getElementById("geminiKeyInput");
+      if(input && input.value.trim()){ saveGeminiKey(input.value); toast("Clave de Gemini guardada"); }
+      else{ clearGeminiKey(); toast("Clave vacía: se ha quitado"); }
+      openMenuSheet();
+    }
+    else if(action==="clear-gemini-key"){
+      clearGeminiKey();
+      toast("Clave de Gemini eliminada");
+      openMenuSheet();
+    }
+    else if(action==="fallback-ocr"){
+      if(pendingShelfFile) processShelfPhoto(pendingShelfFile);
+    }
+    else if(action==="pick-cover"){
+      coverUploadTargetId = id;
+      const input = document.getElementById("manualCoverInput");
+      input.value = "";
+      input.click();
+    }
+    else if(action==="find-editions") runEditionSearch(id);
+    else if(action==="apply-edition") applyEditionResult(id, Number(t.dataset.idx));
     else if(action==="toggle-theme") toggleTheme();
     else if(action==="set-view") setLibraryView(t.dataset.view);
     else if(action==="add-via-search"){
@@ -1691,7 +2120,9 @@
       setTimeout(()=>{ const inp = document.getElementById("searchInput"); if(inp) inp.focus(); }, 250);
     }
     else if(action==="add-via-barcode"){ closeSheet(); openBarcodeSheet(); }
+    else if(action==="add-via-shelfscan"){ closeSheet(); openShelfScanSheet(); }
     else if(action==="add-via-manual"){ closeSheet(); openManualSheet(); }
+    else if(action==="confirm-shelf-scan") confirmShelfScan();
   });
 
   document.getElementById("sheetBackdrop").addEventListener("click", closeSheet);
@@ -1699,8 +2130,23 @@
 
   document.addEventListener("change", (e)=>{
     const t = e.target;
+    if(t.id === "shelfPhotoInput" && t.files[0]){
+      runShelfScan(t.files[0]);
+      return;
+    }
     if(t.id === "manualCoverInput" && t.files[0]){
       resizeImageFile(t.files[0], 500, 0.85).then(dataUrl=>{
+        if(coverUploadTargetId){
+          const item = findItem(coverUploadTargetId);
+          coverUploadTargetId = null;
+          if(!item) return;
+          item.cover = dataUrl;
+          saveState();
+          renderItemSheet(item);
+          renderActiveTabList();
+          toast("Portada actualizada");
+          return;
+        }
         manualCoverData = dataUrl;
         const preview = document.getElementById("manualCoverPreview");
         if(preview){ preview.src = dataUrl; preview.style.display = "block"; }
@@ -1710,6 +2156,9 @@
     if(t.dataset && t.dataset.action==="set-date"){
       const item = findItem(t.dataset.id);
       if(item){ item.manualNextDate = t.value; saveState(); if(activeTab==="upcoming") renderActiveTabList(); }
+    }
+    if(t.dataset && t.dataset.action==="set-edition-volumes"){
+      setEditionVolumes(t.dataset.id, parseInt(t.value, 10));
     }
   });
   document.addEventListener("input", (e)=>{
