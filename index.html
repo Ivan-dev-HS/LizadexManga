@@ -949,10 +949,12 @@
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contents: [{ parts: [ { text: prompt }, { inline_data: { mime_type: "image/jpeg", data: base64 } } ] }],
-        // thinkingBudget:0 desactiva el "razonamiento" del modelo -para
-        // etiquetar una foto no hace falta, y cada segundo de más es un
-        // segundo más de riesgo de que una red móvil corte la conexión.
-        generationConfig: { responseMimeType: "application/json", thinkingConfig: { thinkingBudget: 0 } }
+        // Un budget de razonamiento moderado en vez de 0 o "sin límite":
+        // desactivarlo del todo puede perjudicar la precisión en una foto
+        // con muchos lomos a la vez, pero dejarlo sin límite es lo que
+        // alargaba la respuesta lo suficiente como para que se cortara la
+        // conexión en redes móviles.
+        generationConfig: { responseMimeType: "application/json", thinkingConfig: { thinkingBudget: 512 } }
       })
     }, 2, 1500);
     if(!res.ok){
@@ -960,14 +962,16 @@
       throw new Error((errBody && errBody.error && errBody.error.message) || `Error ${res.status} de Gemini`);
     }
     const data = await res.json();
-    const part = data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts[0];
-    const text = part && part.text;
-    if(!text) throw new Error("Gemini no ha devuelto ningún texto (¿foto bloqueada por el filtro de seguridad?)");
+    const parts = data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts;
+    // Con "thinking" activo puede haber más de una part -nos quedamos con la
+    // primera que traiga texto real (no solo un thoughtSignature).
+    const text = parts && parts.map(p=>p && p.text).find(t=>t);
+    if(!text) throw new Error("Gemini no ha devuelto ningún texto (¿foto bloqueada por el filtro de seguridad? ¿respuesta cortada por el límite de tokens?)");
     const cleaned = text.trim().replace(/^```json\s*/i, "").replace(/^```\s*/, "").replace(/```\s*$/, "");
     let titles;
-    try{ titles = JSON.parse(cleaned); }catch(e){ throw new Error("No se pudo interpretar la respuesta de Gemini"); }
-    if(!Array.isArray(titles)) throw new Error("Formato de respuesta inesperado de Gemini");
-    return titles.filter(t=>typeof t==="string" && t.trim()).map(t=>t.trim()).slice(0, 20);
+    try{ titles = JSON.parse(cleaned); }catch(e){ return { titles: [], rawText: text }; }
+    if(!Array.isArray(titles)) return { titles: [], rawText: text };
+    return { titles: titles.filter(t=>typeof t==="string" && t.trim()).map(t=>t.trim()).slice(0, 20), rawText: text };
   }
 
   async function runShelfScan(file){
@@ -978,9 +982,9 @@
     if(!area) return;
     area.innerHTML = `<div class="loading"><div class="spinner"></div>Analizando la foto con Gemini… puede tardar varios segundos</div>`;
     try{
-      const titles = await analyzeShelfWithGemini(file, key);
+      const { titles, rawText } = await analyzeShelfWithGemini(file, key);
       if(!titles.length){
-        area.innerHTML = `<div class="empty"><b>Gemini no ha reconocido ningún título</b>Prueba con otra foto, con menos objetos alrededor de los mangas.</div>`;
+        area.innerHTML = `<div class="empty"><b>Gemini no ha reconocido ningún título</b>Prueba con otra foto, con menos objetos alrededor de los mangas.</div>${rawOcrDetails(rawText)}`;
         return;
       }
       area.innerHTML = `<div class="loading"><div class="spinner"></div>Buscando ${titles.length} título(s) detectados…</div>`;
@@ -1123,7 +1127,7 @@
   function rawOcrDetails(rawText){
     if(!rawText || !rawText.trim()) return "";
     return `<details style="margin:10px 2px 0;">
-      <summary class="field-hint" style="cursor:pointer;">Ver el texto crudo que ha leído el OCR</summary>
+      <summary class="field-hint" style="cursor:pointer;">Ver la respuesta cruda (OCR o Gemini)</summary>
       <pre style="white-space:pre-wrap; font-family:'JetBrains Mono'; font-size:9.5px; color:var(--text-soft); margin:6px 0 0; max-height:160px; overflow-y:auto;">${escapeHtml(rawText.trim())}</pre>
     </details>`;
   }
