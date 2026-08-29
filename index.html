@@ -874,6 +874,24 @@
     });
   }
 
+  /* ---------------- Listado Manga (ediciones españolas) ---------------- */
+  // listadomanga.es no tiene API pública ni CORS abierto, así que no podemos
+  // traer sus portadas/datos a la app: en vez de eso, copiamos el título y
+  // abrimos su buscador para que lo pegues tú con un toque.
+  function openListadoManga(title){
+    const url = "https://www.listadomanga.es/buscador.php";
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(title).then(()=>{
+        toast(`Copiado "${title}" · pégalo en el buscador`);
+      }).catch(()=>{
+        toast("Abriendo Listado Manga…");
+      });
+    }else{
+      toast("Abriendo Listado Manga…");
+    }
+    window.open(url, "_blank", "noopener");
+  }
+
   /* ---------------- Export / Import ---------------- */
   function exportData(){
     const blob = new Blob([JSON.stringify(state, null, 2)], {type:"application/json"});
@@ -1238,6 +1256,9 @@
         <option value="Edición limitada"></option>
         <option value="Box set"></option>
       </datalist>
+      <div class="sheet-actions" style="margin-top:8px;">
+        <button data-action="open-listadomanga" data-id="${item.id}">${icon("search",15)} Ediciones ES en Listado Manga</button>
+      </div>
       <span class="field-label">Próximo tomo (fecha que anotes tú)</span>
       <input type="date" class="date-input" value="${item.manualNextDate||""}" data-action="set-date" data-id="${item.id}">
       <input type="text" class="note-input" style="margin-top:8px" placeholder="Nota (ej: preventa, nº de tomo…)" value="${item.manualNote||""}" data-action="set-note" data-id="${item.id}">
@@ -1681,6 +1702,10 @@
     else if(action==="do-export"){ exportData(); closeSheet(); }
     else if(action==="do-import"){ document.getElementById("fileImport").click(); }
     else if(action==="do-about") showAboutSheet();
+    else if(action==="open-listadomanga"){
+      const item = findItem(id);
+      if(item) openListadoManga(item.title);
+    }
     else if(action==="toggle-theme") toggleTheme();
     else if(action==="set-view") setLibraryView(t.dataset.view);
     else if(action==="add-via-search"){
