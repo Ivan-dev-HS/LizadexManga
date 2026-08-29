@@ -321,9 +321,10 @@
     width:64px; height:92px; border-radius:8px; object-fit:cover; background:var(--surface-2);
     border:1px solid var(--line);
   }
-  .cover-picker label.upload-btn{
+  .upload-btn{
     font-family:'JetBrains Mono'; font-size:10px; text-transform:uppercase; padding:8px 12px;
     border:1px solid var(--line); border-radius:10px; background:var(--surface-2); cursor:pointer; color:var(--text);
+    display:inline-flex; align-items:center; justify-content:center; gap:7px;
   }
 
   .camera-wrap{
@@ -931,7 +932,7 @@
       <p class="sheet-heading">Foto de la estantería</p>
       <p class="section-sub" style="margin-top:0">Haz una foto a los lomos de varios mangas (o elige una que ya tengas). Se lee el texto en tu propio móvil, sin subir la imagen a ningún sitio. Cuanto más rectos y enfocados estén los lomos, mejor.</p>
       <div class="sheet-actions">
-        <label class="upload-btn" for="shelfPhotoInput" style="flex:1; text-align:center; padding:12px;">${icon("camera",16)} Elegir o hacer una foto</label>
+        <label class="upload-btn" for="shelfPhotoInput" style="flex:1; padding:12px; font-size:11px;">${icon("camera",16)} Elegir o hacer una foto</label>
       </div>
       <div id="shelfScanArea"></div>
     `;
