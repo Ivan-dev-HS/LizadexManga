@@ -875,20 +875,16 @@
   }
 
   /* ---------------- Listado Manga (ediciones españolas) ---------------- */
-  // listadomanga.es no tiene API pública ni CORS abierto, así que no podemos
-  // traer sus portadas/datos a la app: en vez de eso, copiamos el título y
-  // abrimos su buscador para que lo pegues tú con un toque.
+  // listadomanga.es no tiene API pública ni CORS abierto, y no hay forma de
+  // verificar el parámetro exacto de su propio buscador interno. En vez de
+  // adivinarlo (y arriesgarnos a que dé una búsqueda vacía o rota), usamos
+  // una búsqueda de Google restringida a su dominio: eso sí es un formato
+  // estable y documentado, y lleva directo a la ficha de esa serie concreta
+  // en coleccion.php sin necesidad de scraping ni de backend propio.
   function openListadoManga(title){
-    const url = "https://www.listadomanga.es/buscador.php";
-    if(navigator.clipboard && navigator.clipboard.writeText){
-      navigator.clipboard.writeText(title).then(()=>{
-        toast(`Copiado "${title}" · pégalo en el buscador`);
-      }).catch(()=>{
-        toast("Abriendo Listado Manga…");
-      });
-    }else{
-      toast("Abriendo Listado Manga…");
-    }
+    const query = `site:listadomanga.es/coleccion.php "${title}"`;
+    const url = "https://www.google.com/search?q=" + encodeURIComponent(query);
+    toast(`Buscando "${title}" en Listado Manga…`);
     window.open(url, "_blank", "noopener");
   }
 
