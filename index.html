@@ -467,7 +467,7 @@
   }
   .toast.show{opacity:1; bottom:114px;}
 
-  #fileImport, #manualCoverInput{display:none;}
+  #fileImport, #manualCoverInput, #shelfPhotoInput{display:none;}
 </style>
 </head>
 <body>
@@ -502,6 +502,7 @@
 
   <input type="file" id="fileImport" accept=".json">
   <input type="file" id="manualCoverInput" accept="image/*">
+  <input type="file" id="shelfPhotoInput" accept="image/*" capture="environment">
 
   <div class="toast" id="toast"></div>
 
@@ -896,6 +897,143 @@
       img.onerror = reject;
       reader.readAsDataURL(file);
     });
+  }
+
+  /* ---------------- Escaneo de estantería (foto -> varios mangas) ---------------- */
+  // Lee el texto de una foto con OCR 100% en el propio móvil (Tesseract.js,
+  // sin subir la imagen a ningún sitio ni usar ninguna clave de API) y busca
+  // cada línea leída en AniList/MangaUpdates. La detección de texto en lomos
+  // en ángulo, borrosos o en japonés será imperfecta -por eso se muestra
+  // todo para que el usuario confirme antes de añadir, nunca se añade nada
+  // a ciegas.
+  const TESSERACT_CDN = "https://unpkg.com/tesseract.js@5/dist/tesseract.min.js";
+  let shelfScanMatches = [];
+
+  function ensureTesseract(){
+    if(window.Tesseract) return Promise.resolve(window.Tesseract);
+    if(ensureTesseract._pending) return ensureTesseract._pending;
+    ensureTesseract._pending = new Promise((resolve, reject)=>{
+      const s = document.createElement("script");
+      s.src = TESSERACT_CDN;
+      s.onload = ()=> window.Tesseract ? resolve(window.Tesseract) : reject(new Error("No se pudo iniciar el lector de texto."));
+      s.onerror = ()=> reject(new Error("No se pudo cargar el lector de texto (revisa tu conexión)."));
+      document.head.appendChild(s);
+    });
+    return ensureTesseract._pending;
+  }
+
+  function openShelfScanSheet(){
+    openItemId = "shelfscan";
+    shelfScanMatches = [];
+    const content = document.getElementById("sheetContent");
+    content.innerHTML = `
+      <button class="sheet-close" data-action="close-sheet" aria-label="Cerrar">${icon("close",15)}</button>
+      <p class="sheet-heading">Foto de la estantería</p>
+      <p class="section-sub" style="margin-top:0">Haz una foto a los lomos de varios mangas (o elige una que ya tengas). Se lee el texto en tu propio móvil, sin subir la imagen a ningún sitio. Cuanto más rectos y enfocados estén los lomos, mejor.</p>
+      <div class="sheet-actions">
+        <label class="upload-btn" for="shelfPhotoInput" style="flex:1; text-align:center; padding:12px;">${icon("camera",16)} Elegir o hacer una foto</label>
+      </div>
+      <div id="shelfScanArea"></div>
+    `;
+    document.getElementById("shelfPhotoInput").value = "";
+    showSheet();
+  }
+
+  function extractCandidateLines(text){
+    const lines = (text||"").split(/\n+/)
+      .map(l=>l.replace(/[^\p{L}\p{N}\s:.'-]/gu, " ").replace(/\s+/g, " ").trim())
+      .filter(l=> l.length>=3 && /[a-zA-ZÀ-ɏ]{3,}/.test(l))
+      .filter(l=> !/^(vol(?:umen|ume)?|tomo|t\.?|n[ºo]?\.?|cap(?:itulo)?|\d+)$/i.test(l));
+    const seen = new Set();
+    const out = [];
+    for(const l of lines){
+      const key = l.toLowerCase();
+      if(seen.has(key)) continue;
+      seen.add(key);
+      out.push(l);
+      if(out.length>=10) break; // limita las búsquedas para no saturar AniList/MangaUpdates
+    }
+    return out;
+  }
+
+  async function processShelfPhoto(file){
+    const area = document.getElementById("shelfScanArea");
+    if(!area) return;
+    area.innerHTML = `<div class="loading"><div class="spinner"></div>Leyendo texto de la imagen…</div>`;
+    try{
+      const Tesseract = await ensureTesseract();
+      const dataUrl = await resizeImageFile(file, 1600, 0.9);
+      const result = await Tesseract.recognize(dataUrl, "spa+eng", {
+        logger: m=>{
+          const box = area.querySelector(".loading");
+          if(box && m.status==="recognizing text"){
+            box.innerHTML = `<div class="spinner"></div>Leyendo texto de la imagen… ${Math.round((m.progress||0)*100)}%`;
+          }
+        }
+      });
+      const lines = extractCandidateLines(result.data.text);
+      if(!lines.length){
+        area.innerHTML = `<div class="empty"><b>No se ha podido leer texto</b>Prueba con más luz, más cerca y los lomos bien rectos, o añade los mangas a mano.</div>`;
+        return;
+      }
+      area.innerHTML = `<div class="loading"><div class="spinner"></div>Buscando ${lines.length} título(s) detectados…</div>`;
+      const matches = await Promise.all(lines.map(async line=>{
+        const results = await searchAllSources(line).catch(()=>[]);
+        return { line, best: results[0]||null, hasMatch: results.length>0 };
+      }));
+      renderShelfScanResults(matches);
+    }catch(e){
+      area.innerHTML = `<p class="section-sub">No se pudo leer la imagen (${(e&&e.message)||"error desconocido"}). Puedes añadir los mangas a mano o probar con otra foto.</p>`;
+    }
+  }
+
+  function renderShelfScanResults(matches){
+    shelfScanMatches = matches;
+    const area = document.getElementById("shelfScanArea");
+    if(!area) return;
+    const withMatch = matches.filter(m=>m.hasMatch);
+    if(!withMatch.length){
+      area.innerHTML = `<div class="empty"><b>No se ha reconocido ningún título</b>El texto leído no coincide con ningún manga en AniList/MangaUpdates. Prueba con otra foto o añade a mano.</div>`;
+      return;
+    }
+    area.innerHTML = `
+      <p class="field-hint" style="margin:12px 2px 8px;">${withMatch.length} de ${matches.length} línea(s) leídas coinciden con algún manga. Revisa y desmarca los que no sean correctos antes de añadir.</p>
+      ${matches.map((m,idx)=> m.hasMatch ? `
+        <label class="match-option selected" style="cursor:pointer;">
+          <input type="checkbox" data-shelf-idx="${idx}" checked>
+          ${m.best.coverImage && m.best.coverImage.medium ? `<img src="${m.best.coverImage.medium}" alt="" onerror="this.style.visibility='hidden'">` : `<div style="width:38px;height:54px;background:var(--surface-2);border-radius:5px;flex-shrink:0;"></div>`}
+          <span>${bestTitle(m.best.title)}<span class="fab-choice-sub">Leído en la foto: "${m.line}"</span></span>
+        </label>` : `
+        <div class="match-option" style="opacity:.5;">
+          <div style="width:38px;height:54px;background:var(--surface-2);border-radius:5px;flex-shrink:0;"></div>
+          <span>Sin coincidencias<span class="fab-choice-sub">Leído en la foto: "${m.line}"</span></span>
+        </div>`
+      ).join("")}
+      <div class="sheet-actions" style="margin-top:14px;">
+        <button class="primary" data-action="confirm-shelf-scan">Añadir seleccionados a biblioteca</button>
+      </div>
+    `;
+  }
+
+  function confirmShelfScan(){
+    const checked = document.querySelectorAll('#shelfScanArea input[type="checkbox"]:checked');
+    let added = 0;
+    checked.forEach(cb=>{
+      const m = shelfScanMatches[Number(cb.dataset.shelfIdx)];
+      if(!m || !m.best) return;
+      let item = findItem(String(m.best.id));
+      if(!item){ item = mediaToItem(m.best); state.items.push(item); }
+      item.inLibrary = true;
+      added++;
+    });
+    saveState();
+    closeSheet();
+    if(added){
+      activeTab = "library";
+      document.querySelectorAll(".bottomnav button").forEach(b=>b.classList.toggle("active", b.dataset.tab===activeTab));
+    }
+    render();
+    toast(added ? `${added} manga(s) añadido(s) desde la foto` : "No se seleccionó ninguno");
   }
 
   /* ---------------- Búsqueda de ediciones españolas ---------------- */
@@ -1402,7 +1540,7 @@
   }
   function closeSheet(){
     openItemId = null;
-    manualCoverData = null; coverUploadTargetId = null; scanResult = null; scanMatches = []; scanSelectedMatch = null;
+    manualCoverData = null; coverUploadTargetId = null; scanResult = null; scanMatches = []; scanSelectedMatch = null; shelfScanMatches = [];
     stopCameraScan();
     document.getElementById("sheet").classList.remove("open");
     document.getElementById("sheetBackdrop").classList.remove("open");
@@ -1771,6 +1909,10 @@
         <span class="fab-choice-ic">${icon("barcode",19)}</span>
         <span>Código de barras<span class="fab-choice-sub">Escanea el ISBN del tomo físico</span></span>
       </button>
+      <button class="fab-choice" data-action="add-via-shelfscan">
+        <span class="fab-choice-ic">${icon("shelf",19)}</span>
+        <span>Foto de la estantería<span class="fab-choice-sub">Detecta varios mangas a la vez leyendo los lomos (OCR, en tu móvil)</span></span>
+      </button>
       <button class="fab-choice" data-action="add-via-manual">
         <span class="fab-choice-ic">${icon("pencil",19)}</span>
         <span>Añadir a mano<span class="fab-choice-sub">Para ediciones que AniList no tenga</span></span>
@@ -1839,7 +1981,9 @@
       setTimeout(()=>{ const inp = document.getElementById("searchInput"); if(inp) inp.focus(); }, 250);
     }
     else if(action==="add-via-barcode"){ closeSheet(); openBarcodeSheet(); }
+    else if(action==="add-via-shelfscan"){ closeSheet(); openShelfScanSheet(); }
     else if(action==="add-via-manual"){ closeSheet(); openManualSheet(); }
+    else if(action==="confirm-shelf-scan") confirmShelfScan();
   });
 
   document.getElementById("sheetBackdrop").addEventListener("click", closeSheet);
@@ -1847,6 +1991,10 @@
 
   document.addEventListener("change", (e)=>{
     const t = e.target;
+    if(t.id === "shelfPhotoInput" && t.files[0]){
+      processShelfPhoto(t.files[0]);
+      return;
+    }
     if(t.id === "manualCoverInput" && t.files[0]){
       resizeImageFile(t.files[0], 500, 0.85).then(dataUrl=>{
         if(coverUploadTargetId){
