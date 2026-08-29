@@ -901,14 +901,83 @@
   }
 
   /* ---------------- Escaneo de estantería (foto -> varios mangas) ---------------- */
-  // Lee el texto de una foto con OCR 100% en el propio móvil (Tesseract.js,
-  // sin subir la imagen a ningún sitio ni usar ninguna clave de API) y busca
-  // cada línea leída en AniList/MangaUpdates. La detección de texto en lomos
-  // en ángulo, borrosos o en japonés será imperfecta -por eso se muestra
-  // todo para que el usuario confirme antes de añadir, nunca se añade nada
-  // a ciegas.
+  // Dos formas de detectar mangas en una foto:
+  //  - Sin clave: OCR 100% en el propio móvil (Tesseract.js), gratis pero
+  //    limitado (lee letras sueltas, no "entiende" la foto).
+  //  - Con clave de Gemini (gratuita, la pone el usuario en Ajustes): IA de
+  //    visión de verdad, que reconoce los mangas aunque el texto esté en
+  //    ángulo, parcialmente tapado o sea un logo estilizado.
+  // En ambos casos se muestra todo para que el usuario confirme antes de
+  // añadir -nunca se añade nada a ciegas, porque ninguna de las dos vías es
+  // infalible.
   const TESSERACT_CDN = "https://unpkg.com/tesseract.js@5/dist/tesseract.min.js";
+  const GEMINI_KEY_STORE = "tomo_gemini_key";
+  const GEMINI_MODEL = "gemini-2.0-flash";
   let shelfScanMatches = [];
+  let pendingShelfFile = null;
+
+  function getGeminiKey(){ return (localStorage.getItem(GEMINI_KEY_STORE) || "").trim(); }
+  function saveGeminiKey(key){ localStorage.setItem(GEMINI_KEY_STORE, key.trim()); }
+  function clearGeminiKey(){ localStorage.removeItem(GEMINI_KEY_STORE); }
+
+  async function analyzeShelfWithGemini(file, apiKey){
+    const dataUrl = await resizeImageFile(file, 1600, 0.85);
+    const base64 = dataUrl.split(",")[1];
+    const prompt = "Estás viendo una foto de una estantería, pila o mesa con manga o cómics. "
+      + "Identifica cada título de manga o cómic que reconozcas, por el lomo o la portada, "
+      + "aunque el texto esté en vertical, en ángulo, parcialmente tapado por otro objeto o sea "
+      + "un logo estilizado. Devuelve ÚNICAMENTE un array JSON de strings con los títulos "
+      + "detectados (el nombre más reconocible internacionalmente, sin el número de tomo ni la "
+      + "editorial). No incluyas nada más en la respuesta, ni explicaciones ni markdown. Si no "
+      + "reconoces ninguno, devuelve [].";
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [ { text: prompt }, { inline_data: { mime_type: "image/jpeg", data: base64 } } ] }],
+        generationConfig: { responseMimeType: "application/json" }
+      })
+    });
+    if(!res.ok){
+      const errBody = await res.json().catch(()=>null);
+      throw new Error((errBody && errBody.error && errBody.error.message) || `Error ${res.status} de Gemini`);
+    }
+    const data = await res.json();
+    const part = data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts[0];
+    const text = part && part.text;
+    if(!text) throw new Error("Gemini no ha devuelto ningún texto (¿foto bloqueada por el filtro de seguridad?)");
+    const cleaned = text.trim().replace(/^```json\s*/i, "").replace(/^```\s*/, "").replace(/```\s*$/, "");
+    let titles;
+    try{ titles = JSON.parse(cleaned); }catch(e){ throw new Error("No se pudo interpretar la respuesta de Gemini"); }
+    if(!Array.isArray(titles)) throw new Error("Formato de respuesta inesperado de Gemini");
+    return titles.filter(t=>typeof t==="string" && t.trim()).map(t=>t.trim()).slice(0, 20);
+  }
+
+  async function runShelfScan(file){
+    pendingShelfFile = file;
+    const key = getGeminiKey();
+    if(!key){ await processShelfPhoto(file); return; }
+    const area = document.getElementById("shelfScanArea");
+    if(!area) return;
+    area.innerHTML = `<div class="loading"><div class="spinner"></div>Analizando la foto con Gemini…</div>`;
+    try{
+      const titles = await analyzeShelfWithGemini(file, key);
+      if(!titles.length){
+        area.innerHTML = `<div class="empty"><b>Gemini no ha reconocido ningún título</b>Prueba con otra foto, con menos objetos alrededor de los mangas.</div>`;
+        return;
+      }
+      area.innerHTML = `<div class="loading"><div class="spinner"></div>Buscando ${titles.length} título(s) detectados…</div>`;
+      const matches = await Promise.all(titles.map(async line=>{
+        const results = await searchAllSources(line).catch(()=>[]);
+        return { line, best: results[0]||null, hasMatch: results.length>0 };
+      }));
+      renderShelfScanResults(matches);
+    }catch(e){
+      area.innerHTML = `<div class="empty"><b>No se pudo usar Gemini</b>${escapeHtml((e&&e.message)||"Error desconocido")}. Revisa tu clave en Ajustes.
+        <div class="sheet-actions" style="margin-top:12px;"><button data-action="fallback-ocr">Probar con OCR gratis en su lugar</button></div>
+      </div>`;
+    }
+  }
 
   function ensureTesseract(){
     if(window.Tesseract) return Promise.resolve(window.Tesseract);
@@ -930,7 +999,9 @@
     content.innerHTML = `
       <button class="sheet-close" data-action="close-sheet" aria-label="Cerrar">${icon("close",15)}</button>
       <p class="sheet-heading">Foto de la estantería</p>
-      <p class="section-sub" style="margin-top:0">Haz una foto a los lomos de varios mangas (o elige una que ya tengas). Se lee el texto en tu propio móvil, sin subir la imagen a ningún sitio. Cuanto más rectos y enfocados estén los lomos, mejor.</p>
+      <p class="section-sub" style="margin-top:0">Haz una foto a los lomos de varios mangas (o elige una que ya tengas). ${getGeminiKey()
+        ? "Se analizará con Gemini (tu clave, configurada en Ajustes) para mejor precisión."
+        : 'Se leerá el texto con OCR gratuito en tu propio móvil. Para mejor precisión, añade tu clave gratuita de Gemini en el menú "Más opciones".'}</p>
       <div class="sheet-actions">
         <label class="upload-btn" for="shelfPhotoInput" style="flex:1; padding:12px; font-size:11px;">${icon("camera",16)} Elegir o hacer una foto</label>
       </div>
@@ -1926,6 +1997,13 @@
       <button class="menu-item" data-action="do-export">${icon("download",19)} Exportar copia de seguridad</button>
       <button class="menu-item" data-action="do-import">${icon("upload",19)} Importar copia de seguridad</button>
       <button class="menu-item" data-action="do-about">${icon("info",19)} Acerca de Lizadex</button>
+      <span class="field-label" style="margin-top:18px;">Clave de Gemini (opcional)</span>
+      <input type="password" class="text-input" id="geminiKeyInput" placeholder="Pega aquí tu clave de aistudio.google.com" value="${getGeminiKey()}" autocomplete="off">
+      <p class="field-hint">Se guarda solo en este dispositivo y se usa directamente desde tu navegador hacia Google — nunca pasa por ningún servidor nuestro. Con ella, "Foto de la estantería" usa IA de visión (mucha mejor precisión). Sin clave, sigue funcionando con lectura de texto (OCR) gratuita. Consíguela gratis en aistudio.google.com/apikey.</p>
+      <div class="sheet-actions">
+        <button class="primary" data-action="save-gemini-key">Guardar clave</button>
+        ${getGeminiKey() ? `<button class="danger" data-action="clear-gemini-key">Quitar clave</button>` : ""}
+      </div>
       <p class="app-version">Lizadex · datos guardados solo en este dispositivo</p>
     `;
     showSheet();
@@ -2010,6 +2088,20 @@
     else if(action==="do-export"){ exportData(); closeSheet(); }
     else if(action==="do-import"){ document.getElementById("fileImport").click(); }
     else if(action==="do-about") showAboutSheet();
+    else if(action==="save-gemini-key"){
+      const input = document.getElementById("geminiKeyInput");
+      if(input && input.value.trim()){ saveGeminiKey(input.value); toast("Clave de Gemini guardada"); }
+      else{ clearGeminiKey(); toast("Clave vacía: se ha quitado"); }
+      openMenuSheet();
+    }
+    else if(action==="clear-gemini-key"){
+      clearGeminiKey();
+      toast("Clave de Gemini eliminada");
+      openMenuSheet();
+    }
+    else if(action==="fallback-ocr"){
+      if(pendingShelfFile) processShelfPhoto(pendingShelfFile);
+    }
     else if(action==="pick-cover"){
       coverUploadTargetId = id;
       const input = document.getElementById("manualCoverInput");
@@ -2039,7 +2131,7 @@
   document.addEventListener("change", (e)=>{
     const t = e.target;
     if(t.id === "shelfPhotoInput" && t.files[0]){
-      processShelfPhoto(t.files[0]);
+      runShelfScan(t.files[0]);
       return;
     }
     if(t.id === "manualCoverInput" && t.files[0]){
