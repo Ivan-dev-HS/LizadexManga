@@ -762,6 +762,7 @@
       manualNote: "",
       edition: "",
       newChaptersCount: 0,
+      pickupReady: false,
       addedAt: Date.now()
     };
   }
@@ -850,6 +851,19 @@
     item.newChaptersCount = 0;
     saveState();
     render();
+  }
+
+  // Marca manual de "ha llegado a la tienda, ir a recoger" -no hay ninguna
+  // integración automática con WhatsApp ni con nada (ver conversación: no
+  // existe API para leer mensajes personales), así que lo activa/desactiva
+  // el propio usuario al ver el aviso de su tienda.
+  function togglePickupReady(id){
+    const item = findItem(id);
+    if(!item) return;
+    item.pickupReady = !item.pickupReady;
+    saveState();
+    if(openItemId===id) renderItemSheet(item);
+    if(activeTab==="upcoming") renderActiveTabList();
   }
 
   async function refreshAll(){
@@ -1467,13 +1481,31 @@
 
   function renderUpcoming(){
     const tracked = state.items.filter(i=>i.inLibrary || i.inWishlist);
-    const notYet = tracked.filter(i=>i.status==="NOT_YET_RELEASED");
-    const withNew = tracked.filter(i=>i.newChaptersCount>0);
+    // Mientras una serie esté marcada "llegada a la tienda", deja de
+    // mostrarse en el resto de secciones de próximos lanzamientos: la
+    // información relevante ahora es que hay que ir a recogerla, no cuándo
+    // sale el siguiente tomo.
+    const readyForPickup = tracked.filter(i=>i.pickupReady);
+    const rest = tracked.filter(i=>!i.pickupReady);
+    const notYet = rest.filter(i=>i.status==="NOT_YET_RELEASED");
+    const withNew = rest.filter(i=>i.newChaptersCount>0);
 
     let html = `<p class="section-label">Próximos lanzamientos</p>`;
     html += `<p class="section-sub">AniList no da fechas exactas de tomo físico para series en curso — aquí verás series anunciadas sin publicar, capítulos ya salidos que aún no has leído, y puedes anotar tú la fecha de un próximo tomo físico.</p>`;
 
     if(!tracked.length) return html + `<div class="empty">${EMPTY_ILLUSTRATION}<b>Nada que mostrar todavía</b>Añade series a tu biblioteca o wishlist para ver aquí sus novedades.</div>`;
+
+    if(readyForPickup.length){
+      html += `<p class="section-label" style="font-size:17px;">Listos para recoger</p>`;
+      html += readyForPickup.map(i => `
+        <div class="up-item" style="--_accent:var(--green)">${upThumb(i)}
+          <div style="flex:1">
+            <div class="up-date" style="color:var(--green)">Recoger<small>Llegado a la tienda</small></div>
+            <p class="up-title">${i.title}</p>
+            <button class="mini-btn" data-action="toggle-pickup" data-id="${i.id}">Ya lo he recogido</button>
+          </div>
+        </div>`).join("");
+    }
 
     if(notYet.length){
       html += notYet.map(i => `
@@ -1495,8 +1527,9 @@
         </div>`).join("");
     }
 
+    if(rest.length){
     html += `<p class="section-label" style="font-size:17px;margin-top:22px;">Fechas anotadas por ti</p>`;
-    html += tracked.map(i => `
+    html += rest.map(i => `
       <div class="up-item">${upThumb(i)}
         <div style="flex:1">
           <p class="up-title" style="margin-top:0">${i.title}</p>
@@ -1504,6 +1537,7 @@
           <input type="text" class="note-input" placeholder="Nota (ej: tomo 12, preventa Amazon…)" value="${i.manualNote||""}" data-action="set-note" data-id="${i.id}">
         </div>
       </div>`).join("");
+    }
     return html;
   }
 
@@ -1663,6 +1697,9 @@
         <button data-action="find-editions" data-id="${item.id}">${icon("search",15)} Buscar ediciones ES (Google Books)</button>
       </div>
       <div id="editionSearchArea"></div>
+      ${item.pickupReady
+        ? `<button class="newchap" style="background:var(--green); color:#0B0B0F; width:100%; justify-content:center;" data-action="toggle-pickup" data-id="${item.id}">${icon("download",13)} Ha llegado a la tienda · marcar como recogido</button>`
+        : `<div class="sheet-actions" style="margin-top:8px;"><button data-action="toggle-pickup" data-id="${item.id}">${icon("download",15)} Marcar como llegado a la tienda</button></div>`}
       <span class="field-label">Próximo tomo (fecha que anotes tú)</span>
       <input type="date" class="date-input" value="${item.manualNextDate||""}" data-action="set-date" data-id="${item.id}">
       <input type="text" class="note-input" style="margin-top:8px" placeholder="Nota (ej: preventa, nº de tomo…)" value="${item.manualNote||""}" data-action="set-note" data-id="${item.id}">
@@ -1755,6 +1792,7 @@
       manualNote: "",
       edition: "",
       newChaptersCount: 0,
+      pickupReady: false,
       addedAt: Date.now()
     };
     state.items.push(item);
@@ -2089,6 +2127,7 @@
     else if(action==="inc") bumpCounter(id, t.dataset.field, 1);
     else if(action==="dec") bumpCounter(id, t.dataset.field, -1);
     else if(action==="dismiss-chap"){ dismissNewChapters(id); if(openItemId===id) closeSheet(); }
+    else if(action==="toggle-pickup") togglePickupReady(id);
     else if(action==="remove") removeItem(id);
     else if(action==="move-lib") moveToLibrary(id);
     else if(action==="close-sheet") closeSheet();
