@@ -949,12 +949,13 @@
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contents: [{ parts: [ { text: prompt }, { inline_data: { mime_type: "image/jpeg", data: base64 } } ] }],
-        // Un budget de razonamiento moderado en vez de 0 o "sin límite":
-        // desactivarlo del todo puede perjudicar la precisión en una foto
-        // con muchos lomos a la vez, pero dejarlo sin límite es lo que
-        // alargaba la respuesta lo suficiente como para que se cortara la
-        // conexión en redes móviles.
-        generationConfig: { responseMimeType: "application/json", thinkingConfig: { thinkingBudget: 512 } }
+        // Sin thinkingConfig: los valores de thinkingBudget que probamos
+        // (0, 512) dieron respuestas vacías o un error "invalid argument"
+        // en este modelo tan nuevo, así que en vez de adivinar más números
+        // se deja el comportamiento de razonamiento por defecto del modelo
+        // -el retry + el aviso de "puede tardar" ya cubren el riesgo de que
+        // tarde más en redes móviles.
+        generationConfig: { responseMimeType: "application/json" }
       })
     }, 2, 1500);
     if(!res.ok){
