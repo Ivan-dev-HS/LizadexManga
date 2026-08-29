@@ -543,6 +543,7 @@
   let activeTab = "library";
   let openItemId = null;
   let manualCoverData = null;   // dataURL pendiente para el alta manual
+  let coverUploadTargetId = null; // id del item cuya portada se está reemplazando (null = alta manual)
   let scanResult = null;        // {title, volume, confidence} tras leer un ISBN
   let scanMatches = [];         // resultados de AniList tras la búsqueda
   let scanSelectedMatch = null;
@@ -1223,7 +1224,7 @@
     const color = itemColor(item);
     const dark = itemColorDark(item);
     const initials = initialsOf(item.title);
-    const cover = item.cover ? `<img class="cover-preview" style="width:88px;height:126px;" src="${item.cover}" alt="" onerror="this.style.display='none'">` : "";
+    const cover = item.cover ? `<img class="cover-preview" style="position:absolute; inset:0; width:88px;height:126px;" src="${item.cover}" alt="" onerror="this.style.display='none'">` : "";
     content.innerHTML = `
       <button class="sheet-close" data-action="close-sheet" aria-label="Cerrar">${icon("close",15)}</button>
       <div class="sheet-head">
@@ -1241,13 +1242,17 @@
           ${item.newChaptersCount>0 ? `<button class="newchap" data-action="dismiss-chap" data-id="${item.id}">+${item.newChaptersCount} caps. nuevos · marcar visto</button>` : ""}
         </div>
       </div>
+      <div class="sheet-actions" style="margin:0 0 14px;">
+        <button data-action="pick-cover" data-id="${item.id}">${icon("camera",15)} Cambiar portada</button>
+      </div>
       ${item.inLibrary ? volumeBlock(item) : `<p class="section-sub" style="margin-top:0;">Está en tu wishlist. Cuando la tengas, muévela a biblioteca para llevar el control de tomos.</p>`}
       <span class="field-label">Edición (opcional)</span>
-      <input type="text" class="text-input" list="editionOptions" placeholder="Ej: Deluxe, Omnibus, Edición limitada…" value="${item.edition||""}" data-action="set-edition" data-id="${item.id}">
+      <input type="text" class="text-input" list="editionOptions" placeholder="Ej: Deluxe, Omnibus, 3 en 1, Edición limitada…" value="${item.edition||""}" data-action="set-edition" data-id="${item.id}">
       <datalist id="editionOptions">
         <option value="Estándar"></option>
         <option value="Deluxe"></option>
         <option value="Omnibus"></option>
+        <option value="3 en 1"></option>
         <option value="Kanzenban"></option>
         <option value="Edición limitada"></option>
         <option value="Box set"></option>
@@ -1279,7 +1284,7 @@
   }
   function closeSheet(){
     openItemId = null;
-    manualCoverData = null; scanResult = null; scanMatches = []; scanSelectedMatch = null;
+    manualCoverData = null; coverUploadTargetId = null; scanResult = null; scanMatches = []; scanSelectedMatch = null;
     stopCameraScan();
     document.getElementById("sheet").classList.remove("open");
     document.getElementById("sheetBackdrop").classList.remove("open");
@@ -1698,6 +1703,12 @@
     else if(action==="do-export"){ exportData(); closeSheet(); }
     else if(action==="do-import"){ document.getElementById("fileImport").click(); }
     else if(action==="do-about") showAboutSheet();
+    else if(action==="pick-cover"){
+      coverUploadTargetId = id;
+      const input = document.getElementById("manualCoverInput");
+      input.value = "";
+      input.click();
+    }
     else if(action==="open-listadomanga"){
       const item = findItem(id);
       if(item) openListadoManga(item.title);
@@ -1722,6 +1733,17 @@
     const t = e.target;
     if(t.id === "manualCoverInput" && t.files[0]){
       resizeImageFile(t.files[0], 500, 0.85).then(dataUrl=>{
+        if(coverUploadTargetId){
+          const item = findItem(coverUploadTargetId);
+          coverUploadTargetId = null;
+          if(!item) return;
+          item.cover = dataUrl;
+          saveState();
+          renderItemSheet(item);
+          renderActiveTabList();
+          toast("Portada actualizada");
+          return;
+        }
         manualCoverData = dataUrl;
         const preview = document.getElementById("manualCoverPreview");
         if(preview){ preview.src = dataUrl; preview.style.display = "block"; }
