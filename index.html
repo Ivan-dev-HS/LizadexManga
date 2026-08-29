@@ -920,6 +920,20 @@
   function saveGeminiKey(key){ localStorage.setItem(GEMINI_KEY_STORE, key.trim()); }
   function clearGeminiKey(){ localStorage.removeItem(GEMINI_KEY_STORE); }
 
+  // Un fallo de red (conexión cortada, "Load failed" en Safari) es habitual
+  // en redes móviles cuando la petición tarda varios segundos -reintenta un
+  // par de veces antes de rendirse, en vez de fallar a la primera.
+  async function fetchWithRetry(url, options, retries, delayMs){
+    for(let attempt=0; ; attempt++){
+      try{
+        return await fetch(url, options);
+      }catch(e){
+        if(attempt >= retries) throw e;
+        await new Promise(r=>setTimeout(r, delayMs));
+      }
+    }
+  }
+
   async function analyzeShelfWithGemini(file, apiKey){
     const dataUrl = await resizeImageFile(file, 1600, 0.85);
     const base64 = dataUrl.split(",")[1];
@@ -930,14 +944,17 @@
       + "detectados (el nombre más reconocible internacionalmente, sin el número de tomo ni la "
       + "editorial). No incluyas nada más en la respuesta, ni explicaciones ni markdown. Si no "
       + "reconoces ninguno, devuelve [].";
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`, {
+    const res = await fetchWithRetry(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contents: [{ parts: [ { text: prompt }, { inline_data: { mime_type: "image/jpeg", data: base64 } } ] }],
-        generationConfig: { responseMimeType: "application/json" }
+        // thinkingBudget:0 desactiva el "razonamiento" del modelo -para
+        // etiquetar una foto no hace falta, y cada segundo de más es un
+        // segundo más de riesgo de que una red móvil corte la conexión.
+        generationConfig: { responseMimeType: "application/json", thinkingConfig: { thinkingBudget: 0 } }
       })
-    });
+    }, 2, 1500);
     if(!res.ok){
       const errBody = await res.json().catch(()=>null);
       throw new Error((errBody && errBody.error && errBody.error.message) || `Error ${res.status} de Gemini`);
@@ -959,7 +976,7 @@
     if(!key){ await processShelfPhoto(file); return; }
     const area = document.getElementById("shelfScanArea");
     if(!area) return;
-    area.innerHTML = `<div class="loading"><div class="spinner"></div>Analizando la foto con Gemini…</div>`;
+    area.innerHTML = `<div class="loading"><div class="spinner"></div>Analizando la foto con Gemini… puede tardar varios segundos</div>`;
     try{
       const titles = await analyzeShelfWithGemini(file, key);
       if(!titles.length){
@@ -973,8 +990,15 @@
       }));
       renderShelfScanResults(matches);
     }catch(e){
-      area.innerHTML = `<div class="empty"><b>No se pudo usar Gemini</b>${escapeHtml((e&&e.message)||"Error desconocido")}. Revisa tu clave en Ajustes.
-        <div class="sheet-actions" style="margin-top:12px;"><button data-action="fallback-ocr">Probar con OCR gratis en su lugar</button></div>
+      const isNetworkError = e && (e.name === "TypeError" || /load failed|failed to fetch|network/i.test(e.message||""));
+      const reason = isNetworkError
+        ? "Se ha cortado la conexión antes de completar la respuesta (habitual en redes móviles con fotos que tardan varios segundos en analizarse). No es un problema de tu clave."
+        : escapeHtml((e&&e.message)||"Error desconocido");
+      area.innerHTML = `<div class="empty"><b>No se pudo usar Gemini</b>${reason}${isNetworkError ? "" : " Revisa tu clave en Ajustes."}
+        <div class="sheet-actions" style="margin-top:12px;">
+          ${isNetworkError ? `<button data-action="retry-gemini">Reintentar</button>` : ""}
+          <button data-action="fallback-ocr">Probar con OCR gratis en su lugar</button>
+        </div>
       </div>`;
     }
   }
@@ -2101,6 +2125,9 @@
     }
     else if(action==="fallback-ocr"){
       if(pendingShelfFile) processShelfPhoto(pendingShelfFile);
+    }
+    else if(action==="retry-gemini"){
+      if(pendingShelfFile) runShelfScan(pendingShelfFile);
     }
     else if(action==="pick-cover"){
       coverUploadTargetId = id;
