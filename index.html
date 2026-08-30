@@ -669,43 +669,52 @@
   // navegador y cubre el mismo terreno (series con estado, tomos,
   // capítulos y portada), normalizada al mismo formato que AniList.
   async function searchJikan(term){
-    try{
-      const res = await fetch(`https://api.jikan.moe/v4/manga?q=${encodeURIComponent(term)}&limit=25`);
-      if(!res.ok) return [];
-      const data = await res.json();
-      const statusMap = {
-        "Publishing": "RELEASING",
-        "Finished": "FINISHED",
-        "On Hiatus": "HIATUS",
-        "Discontinued": "CANCELLED",
-        "Not yet published": "NOT_YET_RELEASED"
-      };
-      return (data.data||[]).map(m=>{
-        if(!m.mal_id || !m.title) return null;
-        const img = (m.images && (m.images.webp || m.images.jpg)) || {};
-        const year = m.published && m.published.from ? new Date(m.published.from).getFullYear() : null;
-        return {
-          id: "mal-" + m.mal_id,
-          title: { romaji: m.title, english: m.title_english || m.title, native: m.title_japanese || m.title },
-          coverImage: { large: img.large_image_url || img.image_url || "", medium: img.image_url || "" },
-          status: statusMap[m.status] || "CUSTOM",
-          volumes: m.volumes || null,
-          chapters: m.chapters || null,
-          startDate: year ? { year, month: null, day: null } : null,
-          _source: "jikan"
-        };
-      }).filter(Boolean);
-    }catch(e){
-      // Si Jikan falla (red, límite de peticiones...) seguimos solo con
-      // AniList en vez de romper la búsqueda entera.
-      return [];
+    // Sin try/catch aquí a propósito: si esto falla, searchAllSources lo
+    // captura y lo deja visible en pantalla (lastSearchSourceErrors) en vez
+    // de tragárselo en silencio -eso fue justo lo que hizo indetectable el
+    // fallo de MangaUpdates durante mucho tiempo.
+    const res = await fetch(`https://api.jikan.moe/v4/manga?q=${encodeURIComponent(term)}&limit=25`);
+    if(!res.ok){
+      const body = await res.text().catch(()=> "");
+      let detail = "";
+      try{ detail = JSON.parse(body).message || ""; }catch(e){}
+      throw new Error(`Jikan respondió ${res.status}${detail ? " — " + detail : ""}`);
     }
+    const data = await res.json();
+    const statusMap = {
+      "Publishing": "RELEASING",
+      "Finished": "FINISHED",
+      "On Hiatus": "HIATUS",
+      "Discontinued": "CANCELLED",
+      "Not yet published": "NOT_YET_RELEASED"
+    };
+    return (data.data||[]).map(m=>{
+      if(!m.mal_id || !m.title) return null;
+      const img = (m.images && (m.images.webp || m.images.jpg)) || {};
+      const year = m.published && m.published.from ? new Date(m.published.from).getFullYear() : null;
+      return {
+        id: "mal-" + m.mal_id,
+        title: { romaji: m.title, english: m.title_english || m.title, native: m.title_japanese || m.title },
+        coverImage: { large: img.large_image_url || img.image_url || "", medium: img.image_url || "" },
+        status: statusMap[m.status] || "CUSTOM",
+        volumes: m.volumes || null,
+        chapters: m.chapters || null,
+        startDate: year ? { year, month: null, day: null } : null,
+        _source: "jikan"
+      };
+    }).filter(Boolean);
   }
+
+  let lastSearchSourceErrors = { anilist: null, jikan: null };
 
   async function searchAllSources(term){
     const [anilistRes, malRes] = await Promise.allSettled([searchManga(term), searchJikan(term)]);
     const anilist = anilistRes.status==="fulfilled" ? anilistRes.value : [];
     const mal = malRes.status==="fulfilled" ? malRes.value : [];
+    lastSearchSourceErrors = {
+      anilist: anilistRes.status==="rejected" ? ((anilistRes.reason && anilistRes.reason.message) || "error desconocido") : null,
+      jikan: malRes.status==="rejected" ? ((malRes.reason && malRes.reason.message) || "error desconocido") : null
+    };
     return [...anilist, ...mal];
   }
 
@@ -1499,8 +1508,13 @@
     try{
       const media = await searchAllSources(term);
       searchResultsCache = media;
-      resultsEl.innerHTML = media.length ? media.map(resultCardHTML).join("")
-        : `<div class="empty"><b>Sin resultados</b>Prueba con otro título, en su idioma original, o añádelo a mano.</div>`;
+      const sourceNames = { anilist: "AniList", jikan: "MyAnimeList" };
+      const errorNotice = Object.entries(lastSearchSourceErrors)
+        .filter(([,err])=>err)
+        .map(([src,err])=>`<p class="field-hint" style="color:var(--danger); margin:0 2px 10px;">${sourceNames[src]||src} no disponible ahora mismo: ${escapeHtml(err)}</p>`)
+        .join("");
+      resultsEl.innerHTML = errorNotice + (media.length ? media.map(resultCardHTML).join("")
+        : `<div class="empty"><b>Sin resultados</b>Prueba con otro título, en su idioma original, o añádelo a mano.</div>`);
     }catch(e){
       resultsEl.innerHTML = `<div class="empty"><b>No se pudo completar la búsqueda</b>Comprueba tu conexión e inténtalo de nuevo.</div>`;
     }
