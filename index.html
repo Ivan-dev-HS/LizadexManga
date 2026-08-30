@@ -661,49 +661,52 @@
     return data.Page.media;
   }
 
-  // Búsqueda en MangaUpdates (base de datos comunitaria centrada solo en manga/manhwa/manhua),
-  // normalizada al mismo formato que usan los resultados de AniList para poder
-  // reutilizar todo el resto del código (tarjetas, alta en biblioteca, etc.).
-  async function searchMangaUpdates(term){
+  // MangaUpdates se probó como segunda fuente, pero su API no tiene CORS
+  // habilitado (está pensada para consumirse desde un backend, no desde el
+  // navegador) -así que llevaba desde siempre fallando en silencio y nunca
+  // llegó a devolver un resultado real. Jikan (API no oficial de
+  // MyAnimeList) sí es de acceso público abierto para peticiones desde el
+  // navegador y cubre el mismo terreno (series con estado, tomos,
+  // capítulos y portada), normalizada al mismo formato que AniList.
+  async function searchJikan(term){
     try{
-      const res = await fetch("https://api.mangaupdates.com/v1/series/search", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ search: term, page: 1, perpage: 30 })
-      });
+      const res = await fetch(`https://api.jikan.moe/v4/manga?q=${encodeURIComponent(term)}&limit=25`);
       if(!res.ok) return [];
       const data = await res.json();
-      const results = data.results || data.data || [];
-      return results.map(r=>{
-        const rec = r.record || r;
-        const id = rec.series_id || rec.id;
-        const title = rec.title || rec.name;
-        if(!id || !title) return null;
-        const cover = (rec.image && rec.image.url && (rec.image.url.original || rec.image.url.thumb)) || "";
-        const year = rec.year ? parseInt(rec.year, 10) : null;
+      const statusMap = {
+        "Publishing": "RELEASING",
+        "Finished": "FINISHED",
+        "On Hiatus": "HIATUS",
+        "Discontinued": "CANCELLED",
+        "Not yet published": "NOT_YET_RELEASED"
+      };
+      return (data.data||[]).map(m=>{
+        if(!m.mal_id || !m.title) return null;
+        const img = (m.images && (m.images.webp || m.images.jpg)) || {};
+        const year = m.published && m.published.from ? new Date(m.published.from).getFullYear() : null;
         return {
-          id: "mu-" + id,
-          title: { romaji: title, english: title, native: title },
-          coverImage: { large: cover, medium: cover },
-          status: rec.completed ? "FINISHED" : "RELEASING",
-          volumes: null,
-          chapters: null,
+          id: "mal-" + m.mal_id,
+          title: { romaji: m.title, english: m.title_english || m.title, native: m.title_japanese || m.title },
+          coverImage: { large: img.large_image_url || img.image_url || "", medium: img.image_url || "" },
+          status: statusMap[m.status] || "CUSTOM",
+          volumes: m.volumes || null,
+          chapters: m.chapters || null,
           startDate: year ? { year, month: null, day: null } : null,
-          _source: "mangaupdates"
+          _source: "jikan"
         };
       }).filter(Boolean);
     }catch(e){
-      // Si MangaUpdates falla (red, CORS, formato inesperado) seguimos solo con AniList
-      // en vez de romper la búsqueda entera.
+      // Si Jikan falla (red, límite de peticiones...) seguimos solo con
+      // AniList en vez de romper la búsqueda entera.
       return [];
     }
   }
 
   async function searchAllSources(term){
-    const [anilistRes, muRes] = await Promise.allSettled([searchManga(term), searchMangaUpdates(term)]);
+    const [anilistRes, malRes] = await Promise.allSettled([searchManga(term), searchJikan(term)]);
     const anilist = anilistRes.status==="fulfilled" ? anilistRes.value : [];
-    const mu = muRes.status==="fulfilled" ? muRes.value : [];
-    return [...anilist, ...mu];
+    const mal = malRes.status==="fulfilled" ? malRes.value : [];
+    return [...anilist, ...mal];
   }
 
   async function fetchMediaById(numericId){
@@ -1066,7 +1069,7 @@
       if(seen.has(key)) continue;
       seen.add(key);
       out.push(l);
-      if(out.length>=10) break; // limita las búsquedas para no saturar AniList/MangaUpdates
+      if(out.length>=10) break; // limita las búsquedas para no saturar AniList/MyAnimeList
     }
     return out;
   }
@@ -1153,7 +1156,7 @@
     if(!area) return;
     const withMatch = matches.filter(m=>m.hasMatch);
     if(!withMatch.length){
-      area.innerHTML = `<div class="empty"><b>No se ha reconocido ningún título</b>El texto leído no coincide con ningún manga en AniList/MangaUpdates. Prueba con otra foto (menos lomos, más luz) o añade a mano.</div>${rawOcrDetails(rawText)}`;
+      area.innerHTML = `<div class="empty"><b>No se ha reconocido ningún título</b>El texto leído no coincide con ningún manga en AniList/MyAnimeList. Prueba con otra foto (menos lomos, más luz) o añade a mano.</div>${rawOcrDetails(rawText)}`;
       return;
     }
     area.innerHTML = `
@@ -1455,7 +1458,7 @@
         <div class="result-info">
           <p class="result-title">${bestTitle(media.title)}</p>
           <span class="tag" style="border-color:${itemTextColor(fakeItem)}; color:${itemTextColor(fakeItem)};">${statusLabel(media.status)}</span>
-          <span class="tag">${media._source==="mangaupdates" ? "MangaUpdates" : "AniList"}</span>
+          <span class="tag">${media._source==="jikan" ? "MyAnimeList" : "AniList"}</span>
           <div class="result-actions">
             <button class="mini-btn ${inLib?'added':'solid'}" data-action="add-lib" data-id="${media.id}">${inLib?'En biblioteca ✓':'Tengo'}</button>
             <button class="mini-btn ${inWish?'added':''}" data-action="add-wish" data-id="${media.id}">${inWish?'En wishlist ✓':'Quiero'}</button>
@@ -1492,7 +1495,7 @@
     const term = input.value.trim();
     if(!term) return;
     const resultsEl = document.getElementById("searchResults");
-    resultsEl.innerHTML = `<div class="loading"><div class="spinner"></div>Buscando en AniList y MangaUpdates…</div>`;
+    resultsEl.innerHTML = `<div class="loading"><div class="spinner"></div>Buscando en AniList y MyAnimeList…</div>`;
     try{
       const media = await searchAllSources(term);
       searchResultsCache = media;
@@ -1865,7 +1868,7 @@
           row.className = "match-option" + (idx===0 ? " selected" : "");
           row.dataset.action = "select-match";
           row.dataset.idx = idx;
-          row.innerHTML = `<img src="${m.coverImage?.medium||''}" alt="" onerror="this.style.visibility='hidden'"><span>${bestTitle(m.title)}<span class="fab-choice-sub">${m._source==="mangaupdates"?"MangaUpdates":"AniList"}</span></span>`;
+          row.innerHTML = `<img src="${m.coverImage?.medium||''}" alt="" onerror="this.style.visibility='hidden'"><span>${bestTitle(m.title)}<span class="fab-choice-sub">${m._source==="jikan"?"MyAnimeList":"AniList"}</span></span>`;
           list.appendChild(row);
         });
         area.appendChild(list);
@@ -1972,7 +1975,7 @@
       <p class="sheet-heading">Añadir un manga</p>
       <button class="fab-choice" data-action="add-via-search">
         <span class="fab-choice-ic">${icon("search",19)}</span>
-        <span>Buscar manga<span class="fab-choice-sub">Busca a la vez en AniList y MangaUpdates</span></span>
+        <span>Buscar manga<span class="fab-choice-sub">Busca a la vez en AniList y MyAnimeList</span></span>
       </button>
       <button class="fab-choice" data-action="add-via-barcode">
         <span class="fab-choice-ic">${icon("barcode",19)}</span>
