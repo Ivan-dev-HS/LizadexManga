@@ -644,7 +644,7 @@
   async function searchManga(term){
     const query = `
       query ($search: String) {
-        Page(perPage: 12) {
+        Page(perPage: 50) {
           media(search: $search, type: MANGA, sort: POPULARITY_DESC) {
             id
             title { romaji english native }
@@ -669,7 +669,7 @@
       const res = await fetch("https://api.mangaupdates.com/v1/series/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ search: term, page: 1, perpage: 8 })
+        body: JSON.stringify({ search: term, page: 1, perpage: 30 })
       });
       if(!res.ok) return [];
       const data = await res.json();
@@ -1492,14 +1492,14 @@
     const term = input.value.trim();
     if(!term) return;
     const resultsEl = document.getElementById("searchResults");
-    resultsEl.innerHTML = `<div class="loading"><div class="spinner"></div>Buscando en AniList…</div>`;
+    resultsEl.innerHTML = `<div class="loading"><div class="spinner"></div>Buscando en AniList y MangaUpdates…</div>`;
     try{
       const media = await searchAllSources(term);
       searchResultsCache = media;
       resultsEl.innerHTML = media.length ? media.map(resultCardHTML).join("")
         : `<div class="empty"><b>Sin resultados</b>Prueba con otro título, en su idioma original, o añádelo a mano.</div>`;
     }catch(e){
-      resultsEl.innerHTML = `<div class="empty"><b>No se pudo conectar con AniList</b>Comprueba tu conexión e inténtalo de nuevo.</div>`;
+      resultsEl.innerHTML = `<div class="empty"><b>No se pudo completar la búsqueda</b>Comprueba tu conexión e inténtalo de nuevo.</div>`;
     }
   }
 
@@ -1972,7 +1972,7 @@
       <p class="sheet-heading">Añadir un manga</p>
       <button class="fab-choice" data-action="add-via-search">
         <span class="fab-choice-ic">${icon("search",19)}</span>
-        <span>Buscar en AniList<span class="fab-choice-sub">La forma más rápida para la mayoría de series</span></span>
+        <span>Buscar manga<span class="fab-choice-sub">Busca a la vez en AniList y MangaUpdates</span></span>
       </button>
       <button class="fab-choice" data-action="add-via-barcode">
         <span class="fab-choice-ic">${icon("barcode",19)}</span>
