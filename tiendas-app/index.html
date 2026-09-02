@@ -403,10 +403,12 @@
     const name = $("storeNameInput").value.trim();
     if(!name) return;
     try{
-      const { data: store, error: storeErr } = await sb.from("stores").insert({ name }).select().single();
+      const storeId = crypto.randomUUID();
+      const { error: storeErr } = await sb.from("stores").insert({ id: storeId, name });
       if(storeErr) throw storeErr;
-      const { error: staffErr } = await sb.from("store_staff").insert({ store_id: store.id, user_id: currentUser.id, role: "owner" });
+      const { error: staffErr } = await sb.from("store_staff").insert({ store_id: storeId, user_id: currentUser.id, role: "owner" });
       if(staffErr) throw staffErr;
+      const store = { id: storeId, name };
       currentStore = store;
       hideEl("onboardScreen");
       $("storeNameLabel").textContent = store.name;
