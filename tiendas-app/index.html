@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lizadex Tiendas — Gestión de reservas de manga</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#F4F6F8;
+    --surface:#FFFFFF;
+    --surface-2:#EEF1F4;
+    --text:#151A21;
+    --text-soft:#5B6572;
+    --line:#DEE3E8;
+    --brand:#2F5DFF;
+    --brand-dark:#1E3FBF;
+    --green:#0E9F6E;
+    --amber:#D97706;
+    --danger:#DC2626;
+    --radius:14px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    font-family:'Inter', system-ui, sans-serif;
+    background:var(--bg); color:var(--text);
+    min-height:100vh;
+  }
+  h1,h2,h3{font-family:'Bebas Neue', sans-serif; letter-spacing:.3px; margin:0;}
+  .mono{font-family:'JetBrains Mono', monospace;}
+  [hidden]{display:none !important;}
+  button{font-family:inherit; cursor:pointer;}
+  input, select, textarea{font-family:inherit; font-size:14px;}
+
+  /* ---------- Auth ---------- */
+  #authScreen{
+    min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px;
+  }
+  .auth-card{
+    width:100%; max-width:380px; background:var(--surface); border:1px solid var(--line);
+    border-radius:var(--radius); padding:32px 28px; box-shadow:0 20px 50px -20px rgba(20,30,50,.15);
+  }
+  .auth-card h1{font-size:34px; margin-bottom:2px;}
+  .auth-sub{color:var(--text-soft); font-size:13px; margin:0 0 24px;}
+  .field{margin-bottom:14px;}
+  .field label{display:block; font-size:12px; font-weight:600; color:var(--text-soft); margin-bottom:6px; text-transform:uppercase; letter-spacing:.3px;}
+  .field input{
+    width:100%; padding:11px 13px; border:1.5px solid var(--line); border-radius:10px;
+    background:var(--surface-2); color:var(--text); transition:border-color .15s, box-shadow .15s;
+  }
+  .field input:focus{outline:none; border-color:var(--brand); box-shadow:0 0 0 3px rgba(47,93,255,.15);}
+  .btn{
+    display:inline-flex; align-items:center; justify-content:center; gap:8px;
+    padding:11px 18px; border-radius:10px; border:1px solid var(--line);
+    background:var(--surface-2); color:var(--text); font-weight:600; font-size:13.5px;
+    transition:transform .1s, background-color .15s;
+  }
+  .btn:active{transform:scale(.97);}
+  .btn-primary{background:var(--brand); border-color:var(--brand); color:#fff; width:100%;}
+  .btn-primary:hover{background:var(--brand-dark);}
+  .btn-link{background:none; border:none; color:var(--brand); font-weight:600; padding:0; font-size:13px;}
+  .auth-toggle{text-align:center; margin-top:16px; font-size:13px; color:var(--text-soft);}
+  .auth-error{background:#FEF2F2; color:var(--danger); border:1px solid #FCA5A5; border-radius:8px; padding:9px 12px; font-size:12.5px; margin-bottom:14px;}
+  .auth-note{background:#EFF4FF; color:#1E40AF; border:1px solid #BFD4FF; border-radius:8px; padding:9px 12px; font-size:12.5px; margin-bottom:14px;}
+
+  /* ---------- App shell ---------- */
+  #appScreen{min-height:100vh; display:flex; flex-direction:column;}
+  header.topbar{
+    background:var(--surface); border-bottom:1px solid var(--line);
+    padding:14px 20px; display:flex; align-items:center; justify-content:space-between;
+    position:sticky; top:0; z-index:10;
+  }
+  .brand-row{display:flex; align-items:center; gap:10px;}
+  .brand-mark{
+    width:34px; height:34px; border-radius:9px; background:linear-gradient(135deg, var(--brand), var(--brand-dark));
+    display:flex; align-items:center; justify-content:center; color:#fff; font-family:'Bebas Neue'; font-size:17px; flex-shrink:0;
+  }
+  .brand-row .store-name{font-size:15px; font-weight:700;}
+  .brand-row .store-sub{font-size:10.5px; color:var(--text-soft); text-transform:uppercase; letter-spacing:.4px;}
+  main{flex:1; max-width:960px; margin:0 auto; width:100%; padding:22px 20px 60px;}
+
+  nav.tabs{display:flex; gap:6px; margin-bottom:20px; border-bottom:1px solid var(--line);}
+  nav.tabs button{
+    background:none; border:none; padding:10px 4px; margin-right:18px; font-size:14px; font-weight:600;
+    color:var(--text-soft); border-bottom:2.5px solid transparent; margin-bottom:-1px;
+  }
+  nav.tabs button.active{color:var(--brand); border-bottom-color:var(--brand);}
+
+  .toolbar{display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:16px; flex-wrap:wrap;}
+  .status-filters{display:flex; gap:6px;}
+  .status-filters button{
+    padding:6px 13px; border-radius:20px; border:1px solid var(--line); background:var(--surface);
+    font-size:12.5px; font-weight:600; color:var(--text-soft);
+  }
+  .status-filters button.active{background:var(--text); color:#fff; border-color:var(--text);}
+
+  .card-list{display:flex; flex-direction:column; gap:10px;}
+  .order-card, .customer-card{
+    background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:14px;
+    display:flex; gap:12px; align-items:flex-start;
+  }
+  .order-cover{
+    width:46px; height:64px; border-radius:6px; object-fit:cover; background:var(--surface-2); flex-shrink:0;
+  }
+  .order-info{flex:1; min-width:0;}
+  .order-title{font-weight:700; font-size:14px; margin:0 0 3px;}
+  .order-meta{font-size:12px; color:var(--text-soft); margin:0 0 8px;}
+  .badge{
+    display:inline-block; font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.3px;
+    padding:3px 9px; border-radius:20px; margin-right:6px;
+  }
+  .badge-pending{background:#FEF3C7; color:#92400E;}
+  .badge-arrived{background:#D1FAE5; color:#065F46;}
+  .badge-picked_up{background:#E5E7EB; color:#374151;}
+  .badge-cancelled{background:#FEE2E2; color:#991B1B;}
+  .order-actions{display:flex; gap:8px; flex-wrap:wrap;}
+  .mini-btn{
+    font-size:11.5px; font-weight:600; padding:6px 11px; border-radius:8px; border:1px solid var(--line);
+    background:var(--surface-2); color:var(--text);
+  }
+  .mini-btn.primary{background:var(--green); border-color:var(--green); color:#fff;}
+  .mini-btn.danger{color:var(--danger); border-color:#FCA5A5;}
+
+  .empty-state{
+    text-align:center; padding:48px 20px; color:var(--text-soft); border:1.5px dashed var(--line); border-radius:14px;
+  }
+  .empty-state b{display:block; color:var(--text); font-size:16px; margin-bottom:4px; font-family:'Inter'; }
+
+  .fab{
+    position:fixed; right:24px; bottom:24px; width:56px; height:56px; border-radius:50%;
+    background:var(--brand); color:#fff; border:none; font-size:26px; box-shadow:0 10px 30px -10px rgba(47,93,255,.6);
+    display:flex; align-items:center; justify-content:center; z-index:20;
+  }
+
+  /* ---------- Modal ---------- */
+  .modal-backdrop{
+    position:fixed; inset:0; background:rgba(15,20,30,.45); z-index:50; display:flex; align-items:flex-end;
+    justify-content:center;
+  }
+  @media (min-width:640px){ .modal-backdrop{ align-items:center; } }
+  .modal{
+    background:var(--surface); width:100%; max-width:480px; max-height:92vh; overflow-y:auto;
+    border-radius:18px 18px 0 0; padding:22px 22px calc(22px + env(safe-area-inset-bottom));
+  }
+  @media (min-width:640px){ .modal{ border-radius:16px; } }
+  .modal h2{font-size:24px; margin-bottom:16px;}
+  .modal .field-hint{font-size:11.5px; color:var(--text-soft); margin:4px 2px 0;}
+  .search-results{margin-top:8px; max-height:200px; overflow-y:auto; border:1px solid var(--line); border-radius:10px;}
+  .search-result-row{
+    display:flex; gap:10px; align-items:center; padding:8px 10px; cursor:pointer; border-bottom:1px solid var(--line);
+  }
+  .search-result-row:last-child{border-bottom:none;}
+  .search-result-row:hover{background:var(--surface-2);}
+  .search-result-row img{width:32px; height:46px; object-fit:cover; border-radius:4px; background:var(--surface-2);}
+  .search-result-row.selected{background:#EFF4FF; outline:1.5px solid var(--brand);}
+  .selected-manga{
+    display:flex; gap:10px; align-items:center; padding:10px; border:1.5px solid var(--brand); border-radius:10px;
+    background:#EFF4FF; margin-top:8px;
+  }
+  .selected-manga img{width:36px; height:50px; object-fit:cover; border-radius:5px;}
+  .modal-actions{display:flex; gap:10px; margin-top:20px;}
+  .close-x{
+    position:absolute; top:16px; right:16px; background:var(--surface-2); border:1px solid var(--line);
+    width:30px; height:30px; border-radius:50%; font-size:14px; color:var(--text-soft);
+  }
+  .modal{position:relative;}
+
+  .loading-inline{font-size:12.5px; color:var(--text-soft); padding:8px 0;}
+  .logout-btn{background:none; border:none; color:var(--text-soft); font-size:12.5px; font-weight:600;}
+</style>
+</head>
+<body>
+
+  <!-- ============ AUTH ============ -->
+  <div id="authScreen">
+    <div class="auth-card">
+      <h1>LIZADEX TIENDAS</h1>
+      <p class="auth-sub">Gestiona los pedidos y reservas de manga de tus clientes</p>
+      <div id="authError" class="auth-error" hidden></div>
+      <div id="authNote" class="auth-note" hidden></div>
+      <form id="authForm">
+        <div class="field">
+          <label>Email</label>
+          <input type="email" id="authEmail" required autocomplete="email">
+        </div>
+        <div class="field">
+          <label>Contraseña</label>
+          <input type="password" id="authPassword" required autocomplete="current-password" minlength="6">
+        </div>
+        <button type="submit" class="btn btn-primary" id="authSubmitBtn">Entrar</button>
+      </form>
+      <p class="auth-toggle">
+        <span id="authToggleText">¿No tienes cuenta todavía?</span>
+        <button type="button" class="btn-link" id="authToggleBtn">Crear una cuenta</button>
+      </p>
+    </div>
+  </div>
+
+  <!-- ============ ONBOARDING (crear tienda) ============ -->
+  <div id="onboardScreen" hidden>
+    <div id="authScreen" style="min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px;">
+      <div class="auth-card">
+        <h1>TU TIENDA</h1>
+        <p class="auth-sub">Antes de empezar, dinos el nombre de tu tienda o comercio</p>
+        <div id="onboardError" class="auth-error" hidden></div>
+        <form id="onboardForm">
+          <div class="field">
+            <label>Nombre de la tienda</label>
+            <input type="text" id="storeNameInput" placeholder="Ej: Manga Central" required>
+          </div>
+          <button type="submit" class="btn btn-primary">Crear tienda</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ APP ============ -->
+  <div id="appScreen" hidden>
+    <header class="topbar">
+      <div class="brand-row">
+        <div class="brand-mark">L</div>
+        <div>
+          <div class="store-name" id="storeNameLabel">—</div>
+          <div class="store-sub">Lizadex Tiendas</div>
+        </div>
+      </div>
+      <button class="logout-btn" id="logoutBtn">Cerrar sesión</button>
+    </header>
+    <main>
+      <nav class="tabs">
+        <button class="tab-btn active" data-tab="orders">Pedidos</button>
+        <button class="tab-btn" data-tab="customers">Clientes</button>
+      </nav>
+
+      <div id="ordersTab">
+        <div class="toolbar">
+          <div class="status-filters" id="statusFilters">
+            <button data-status="pending" class="active">Pendientes</button>
+            <button data-status="arrived">Llegados</button>
+            <button data-status="picked_up">Recogidos</button>
+            <button data-status="all">Todos</button>
+          </div>
+        </div>
+        <div id="ordersList" class="card-list"><div class="loading-inline">Cargando…</div></div>
+      </div>
+
+      <div id="customersTab" hidden>
+        <div class="toolbar">
+          <h2 style="font-size:18px; font-family:'Inter'; font-weight:700;">Clientes</h2>
+          <button class="btn" id="addCustomerBtn">+ Cliente</button>
+        </div>
+        <div id="customersList" class="card-list"><div class="loading-inline">Cargando…</div></div>
+      </div>
+    </main>
+    <button class="fab" id="fabNewOrder" title="Nuevo pedido">+</button>
+  </div>
+
+  <!-- ============ MODAL: nuevo pedido ============ -->
+  <div class="modal-backdrop" id="orderModalBackdrop" hidden>
+    <div class="modal">
+      <button class="close-x" data-close-modal="orderModalBackdrop">✕</button>
+      <h2>Nuevo pedido</h2>
+      <div class="field">
+        <label>Cliente</label>
+        <input type="text" id="customerNameInput" list="customerDatalist" placeholder="Nombre del cliente" required>
+        <datalist id="customerDatalist"></datalist>
+        <p class="field-hint">Si no existe, se creará automáticamente.</p>
+      </div>
+      <div class="field">
+        <label>Buscar manga</label>
+        <input type="text" id="mangaSearchInput" placeholder="Ej: One Piece">
+        <div id="mangaSearchResults" class="search-results" hidden></div>
+        <div id="selectedManga" hidden></div>
+      </div>
+      <div class="field">
+        <label>Edición / tomo (opcional)</label>
+        <input type="text" id="editionInput" placeholder="Ej: Tomo 45, edición 3 en 1…">
+      </div>
+      <div class="field">
+        <label>Nota (opcional)</label>
+        <input type="text" id="orderNoteInput" placeholder="Ej: pagado por adelantado">
+      </div>
+      <div id="orderFormError" class="auth-error" hidden></div>
+      <div class="modal-actions">
+        <button class="btn btn-primary" id="saveOrderBtn">Guardar pedido</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ MODAL: nuevo cliente ============ -->
+  <div class="modal-backdrop" id="customerModalBackdrop" hidden>
+    <div class="modal">
+      <button class="close-x" data-close-modal="customerModalBackdrop">✕</button>
+      <h2>Nuevo cliente</h2>
+      <div class="field"><label>Nombre</label><input type="text" id="newCustomerName" required></div>
+      <div class="field"><label>Teléfono</label><input type="text" id="newCustomerPhone"></div>
+      <div class="field"><label>Email</label><input type="email" id="newCustomerEmail"></div>
+      <div class="field"><label>Notas</label><input type="text" id="newCustomerNotes"></div>
+      <div id="customerFormError" class="auth-error" hidden></div>
+      <div class="modal-actions">
+        <button class="btn btn-primary" id="saveCustomerBtn">Guardar cliente</button>
+      </div>
+    </div>
+  </div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script>
+(function(){
+  "use strict";
+
+  const SUPABASE_URL = "https://qvttuzsogjniajjqdxqf.supabase.co";
+  const SUPABASE_KEY = "sb_publishable_whev0Ag1EkvgQC6ODG9bUw_xRbRygU5";
+  const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+  let currentUser = null;
+  let currentStore = null;
+  let isSignUp = false;
+  let activeStatusFilter = "pending";
+  let activeTab = "orders";
+  let selectedMangaResult = null;
+  let customersCache = [];
+
+  function $(id){ return document.getElementById(id); }
+  function showEl(id){ $(id).hidden = false; }
+  function hideEl(id){ $(id).hidden = true; }
+  function escapeHtml(str){
+    return String(str||"").replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  }
+
+  /* ---------------- Auth ---------------- */
+  $("authToggleBtn").addEventListener("click", ()=>{
+    isSignUp = !isSignUp;
+    $("authToggleText").textContent = isSignUp ? "¿Ya tienes cuenta?" : "¿No tienes cuenta todavía?";
+    $("authToggleBtn").textContent = isSignUp ? "Iniciar sesión" : "Crear una cuenta";
+    $("authSubmitBtn").textContent = isSignUp ? "Crear cuenta" : "Entrar";
+    hideEl("authError"); hideEl("authNote");
+  });
+
+  $("authForm").addEventListener("submit", async (e)=>{
+    e.preventDefault();
+    hideEl("authError"); hideEl("authNote");
+    const email = $("authEmail").value.trim();
+    const password = $("authPassword").value;
+    $("authSubmitBtn").disabled = true;
+    try{
+      if(isSignUp){
+        const { data, error } = await sb.auth.signUp({ email, password });
+        if(error) throw error;
+        if(data.user && !data.session){
+          $("authNote").textContent = "Cuenta creada. Revisa tu email para confirmarla y luego inicia sesión.";
+          showEl("authNote");
+        }
+      }else{
+        const { error } = await sb.auth.signInWithPassword({ email, password });
+        if(error) throw error;
+      }
+    }catch(err){
+      $("authError").textContent = err.message || "No se pudo completar la operación.";
+      showEl("authError");
+    }finally{
+      $("authSubmitBtn").disabled = false;
+    }
+  });
+
+  $("logoutBtn").addEventListener("click", async ()=>{
+    await sb.auth.signOut();
+  });
+
+  sb.auth.onAuthStateChange((event, session)=>{
+    if(session && session.user){
+      currentUser = session.user;
+      boot();
+    }else{
+      currentUser = null; currentStore = null;
+      hideEl("appScreen"); hideEl("onboardScreen"); showEl("authScreen");
+    }
+  });
+
+  async function boot(){
+    hideEl("authScreen");
+    const { data: staffRows, error } = await sb.from("store_staff").select("store_id").eq("user_id", currentUser.id).limit(1);
+    if(error){ console.error(error); return; }
+    if(!staffRows || !staffRows.length){
+      showEl("onboardScreen");
+      return;
+    }
+    const storeId = staffRows[0].store_id;
+    const { data: store } = await sb.from("stores").select("*").eq("id", storeId).single();
+    currentStore = store;
+    hideEl("onboardScreen");
+    $("storeNameLabel").textContent = store ? store.name : "Mi tienda";
+    showEl("appScreen");
+    loadOrders();
+    loadCustomers();
+  }
+
+  $("onboardForm").addEventListener("submit", async (e)=>{
+    e.preventDefault();
+    hideEl("onboardError");
+    const name = $("storeNameInput").value.trim();
+    if(!name) return;
+    try{
+      const { data: store, error: storeErr } = await sb.from("stores").insert({ name }).select().single();
+      if(storeErr) throw storeErr;
+      const { error: staffErr } = await sb.from("store_staff").insert({ store_id: store.id, user_id: currentUser.id, role: "owner" });
+      if(staffErr) throw staffErr;
+      currentStore = store;
+      hideEl("onboardScreen");
+      $("storeNameLabel").textContent = store.name;
+      showEl("appScreen");
+      loadOrders();
+      loadCustomers();
+    }catch(err){
+      $("onboardError").textContent = err.message || "No se pudo crear la tienda.";
+      showEl("onboardError");
+    }
+  });
+
+  /* ---------------- Tabs ---------------- */
+  document.querySelectorAll(".tab-btn").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      activeTab = btn.dataset.tab;
+      document.querySelectorAll(".tab-btn").forEach(b=>b.classList.toggle("active", b===btn));
+      $("ordersTab").hidden = activeTab!=="orders";
+      $("customersTab").hidden = activeTab!=="customers";
+    });
+  });
+
+  /* ---------------- Orders ---------------- */
+  const STATUS_LABEL = { pending:"Pendiente", arrived:"Llegado", picked_up:"Recogido", cancelled:"Cancelado" };
+
+  document.querySelectorAll("#statusFilters button").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      activeStatusFilter = btn.dataset.status;
+      document.querySelectorAll("#statusFilters button").forEach(b=>b.classList.toggle("active", b===btn));
+      loadOrders();
+    });
+  });
+
+  async function loadOrders(){
+    const list = $("ordersList");
+    list.innerHTML = `<div class="loading-inline">Cargando…</div>`;
+    let query = sb.from("orders").select("*, customers(name)").order("created_at", { ascending:false });
+    if(activeStatusFilter !== "all") query = query.eq("status", activeStatusFilter);
+    const { data, error } = await query;
+    if(error){ list.innerHTML = `<div class="empty-state"><b>Error al cargar pedidos</b>${escapeHtml(error.message)}</div>`; return; }
+    if(!data.length){
+      list.innerHTML = `<div class="empty-state"><b>No hay pedidos aquí</b>Usa el botón + para añadir uno nuevo.</div>`;
+      return;
+    }
+    list.innerHTML = data.map(o=>{
+      const customerName = o.customers ? o.customers.name : "Sin cliente";
+      let actions = "";
+      if(o.status==="pending") actions = `<button class="mini-btn primary" data-action="mark-arrived" data-id="${o.id}">Marcar llegado</button>`;
+      else if(o.status==="arrived") actions = `<button class="mini-btn primary" data-action="mark-picked-up" data-id="${o.id}">Marcar recogido</button>`;
+      actions += `<button class="mini-btn danger" data-action="delete-order" data-id="${o.id}">Eliminar</button>`;
+      return `
+        <div class="order-card">
+          ${o.cover_url ? `<img class="order-cover" src="${o.cover_url}" alt="">` : `<div class="order-cover"></div>`}
+          <div class="order-info">
+            <p class="order-title">${escapeHtml(o.title)}</p>
+            <p class="order-meta">${escapeHtml(customerName)}${o.edition ? " · " + escapeHtml(o.edition) : ""}${o.note ? " · " + escapeHtml(o.note) : ""}</p>
+            <span class="badge badge-${o.status}">${STATUS_LABEL[o.status]||o.status}</span>
+            <div class="order-actions" style="margin-top:8px;">${actions}</div>
+          </div>
+        </div>`;
+    }).join("");
+  }
+
+  document.addEventListener("click", async (e)=>{
+    const t = e.target.closest("[data-action]");
+    if(!t) return;
+    const action = t.dataset.action;
+    const id = t.dataset.id;
+    if(action==="mark-arrived"){
+      await sb.from("orders").update({ status:"arrived", arrived_at: new Date().toISOString() }).eq("id", id);
+      loadOrders();
+    }else if(action==="mark-picked-up"){
+      await sb.from("orders").update({ status:"picked_up", picked_up_at: new Date().toISOString() }).eq("id", id);
+      loadOrders();
+    }else if(action==="delete-order"){
+      if(confirm("¿Eliminar este pedido?")){
+        await sb.from("orders").delete().eq("id", id);
+        loadOrders();
+      }
+    }
+  });
+
+  /* ---------------- Customers ---------------- */
+  async function loadCustomers(){
+    const list = $("customersList");
+    const { data, error } = await sb.from("customers").select("*").order("name");
+    customersCache = data || [];
+    $("customerDatalist").innerHTML = customersCache.map(c=>`<option value="${escapeHtml(c.name)}">`).join("");
+    if(error){ list.innerHTML = `<div class="empty-state"><b>Error</b>${escapeHtml(error.message)}</div>`; return; }
+    if(!data.length){
+      list.innerHTML = `<div class="empty-state"><b>Todavía no tienes clientes</b>Se crean automáticamente al hacer un pedido, o añádelos aquí.</div>`;
+      return;
+    }
+    list.innerHTML = data.map(c=>`
+      <div class="customer-card">
+        <div class="order-info">
+          <p class="order-title">${escapeHtml(c.name)}</p>
+          <p class="order-meta">${[c.phone, c.email].filter(Boolean).map(escapeHtml).join(" · ") || "Sin contacto"}${c.notes ? " · " + escapeHtml(c.notes) : ""}</p>
+        </div>
+      </div>`).join("");
+  }
+
+  $("addCustomerBtn").addEventListener("click", ()=> showEl("customerModalBackdrop"));
+
+  $("saveCustomerBtn").addEventListener("click", async ()=>{
+    hideEl("customerFormError");
+    const name = $("newCustomerName").value.trim();
+    if(!name){ $("customerFormError").textContent = "Ponle un nombre al cliente."; showEl("customerFormError"); return; }
+    const { error } = await sb.from("customers").insert({
+      store_id: currentStore.id, name,
+      phone: $("newCustomerPhone").value.trim() || null,
+      email: $("newCustomerEmail").value.trim() || null,
+      notes: $("newCustomerNotes").value.trim() || null
+    });
+    if(error){ $("customerFormError").textContent = error.message; showEl("customerFormError"); return; }
+    ["newCustomerName","newCustomerPhone","newCustomerEmail","newCustomerNotes"].forEach(id=>$(id).value="");
+    hideEl("customerModalBackdrop");
+    loadCustomers();
+  });
+
+  /* ---------------- New order modal ---------------- */
+  $("fabNewOrder").addEventListener("click", ()=>{
+    $("customerNameInput").value = "";
+    $("mangaSearchInput").value = "";
+    $("editionInput").value = "";
+    $("orderNoteInput").value = "";
+    selectedMangaResult = null;
+    hideEl("selectedManga");
+    hideEl("mangaSearchResults");
+    hideEl("orderFormError");
+    showEl("orderModalBackdrop");
+  });
+
+  document.querySelectorAll("[data-close-modal]").forEach(btn=>{
+    btn.addEventListener("click", ()=> hideEl(btn.dataset.closeModal));
+  });
+  document.querySelectorAll(".modal-backdrop").forEach(backdrop=>{
+    backdrop.addEventListener("click", (e)=>{ if(e.target===backdrop) backdrop.hidden = true; });
+  });
+
+  let mangaSearchTimer = null;
+  $("mangaSearchInput").addEventListener("input", ()=>{
+    clearTimeout(mangaSearchTimer);
+    const term = $("mangaSearchInput").value.trim();
+    selectedMangaResult = null;
+    hideEl("selectedManga");
+    if(term.length < 2){ hideEl("mangaSearchResults"); return; }
+    mangaSearchTimer = setTimeout(()=> runMangaSearch(term), 400);
+  });
+
+  async function runMangaSearch(term){
+    const box = $("mangaSearchResults");
+    box.innerHTML = `<div class="loading-inline" style="padding:8px;">Buscando…</div>`;
+    showEl("mangaSearchResults");
+    try{
+      const res = await fetch("https://graphql.anilist.co", {
+        method:"POST", headers:{ "Content-Type":"application/json" },
+        body: JSON.stringify({
+          query: `query($s:String){ Page(perPage:10){ media(search:$s, type:MANGA, sort:POPULARITY_DESC){ id title{romaji english} coverImage{medium} } } }`,
+          variables:{ s: term }
+        })
+      });
+      const json = await res.json();
+      const media = (json.data && json.data.Page.media) || [];
+      if(!media.length){ box.innerHTML = `<div class="loading-inline" style="padding:8px;">Sin resultados en AniList.</div>`; return; }
+      box.innerHTML = media.map((m,idx)=>`
+        <div class="search-result-row" data-idx="${idx}">
+          <img src="${(m.coverImage&&m.coverImage.medium)||''}" alt="">
+          <span>${escapeHtml((m.title.english||m.title.romaji))}</span>
+        </div>`).join("");
+      box.dataset.results = JSON.stringify(media);
+    }catch(e){
+      box.innerHTML = `<div class="loading-inline" style="padding:8px; color:var(--danger);">No se pudo buscar (${escapeHtml(e.message)}).</div>`;
+    }
+  }
+
+  $("mangaSearchResults").addEventListener("click", (e)=>{
+    const row = e.target.closest(".search-result-row");
+    if(!row) return;
+    const results = JSON.parse($("mangaSearchResults").dataset.results || "[]");
+    const media = results[Number(row.dataset.idx)];
+    if(!media) return;
+    selectedMangaResult = media;
+    const title = media.title.english || media.title.romaji;
+    $("selectedManga").innerHTML = `
+      <img src="${(media.coverImage&&media.coverImage.medium)||''}" alt="">
+      <span>${escapeHtml(title)}</span>`;
+    showEl("selectedManga");
+    hideEl("mangaSearchResults");
+  });
+
+  $("saveOrderBtn").addEventListener("click", async ()=>{
+    hideEl("orderFormError");
+    const customerName = $("customerNameInput").value.trim();
+    const manualTitle = $("mangaSearchInput").value.trim();
+    if(!customerName){ $("orderFormError").textContent = "Ponle un nombre al cliente."; showEl("orderFormError"); return; }
+    const title = selectedMangaResult ? (selectedMangaResult.title.english || selectedMangaResult.title.romaji) : manualTitle;
+    if(!title){ $("orderFormError").textContent = "Indica qué manga es (búscalo o escribe el título)."; showEl("orderFormError"); return; }
+
+    try{
+      let customer = customersCache.find(c=>c.name.toLowerCase()===customerName.toLowerCase());
+      if(!customer){
+        const { data, error } = await sb.from("customers").insert({ store_id: currentStore.id, name: customerName }).select().single();
+        if(error) throw error;
+        customer = data;
+        customersCache.push(customer);
+      }
+      const { error: orderErr } = await sb.from("orders").insert({
+        store_id: currentStore.id,
+        customer_id: customer.id,
+        title,
+        cover_url: selectedMangaResult ? (selectedMangaResult.coverImage && selectedMangaResult.coverImage.medium) : null,
+        source: selectedMangaResult ? "anilist" : null,
+        source_id: selectedMangaResult ? String(selectedMangaResult.id) : null,
+        edition: $("editionInput").value.trim() || null,
+        note: $("orderNoteInput").value.trim() || null,
+        status: "pending"
+      });
+      if(orderErr) throw orderErr;
+      hideEl("orderModalBackdrop");
+      loadOrders();
+      loadCustomers();
+    }catch(err){
+      $("orderFormError").textContent = err.message || "No se pudo guardar el pedido.";
+      showEl("orderFormError");
+    }
+  });
+
+  /* ---------------- Init ---------------- */
+  sb.auth.getSession().then(({ data })=>{
+    if(data.session && data.session.user){
+      currentUser = data.session.user;
+      boot();
+    }
+  });
+})();
+</script>
+</body>
+</html>
