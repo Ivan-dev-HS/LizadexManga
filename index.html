@@ -841,6 +841,7 @@
     let item = findItem(String(media.id));
     if(!item){ item = mediaToItem(media); state.items.push(item); }
     item.inLibrary = true;
+    item.inWishlist = false;
     saveState();
     toast(`"${item.title}" añadido a tu biblioteca`);
     render();
@@ -850,6 +851,7 @@
     let item = findItem(String(media.id));
     if(!item){ item = mediaToItem(media); state.items.push(item); }
     item.inWishlist = true;
+    item.inLibrary = false;
     saveState();
     toast(`"${item.title}" añadido a la wishlist`);
     render();
@@ -866,6 +868,7 @@
   }
   function moveToLibrary(id){
     const item = findItem(id);
+    if(!item) return;
     item.inLibrary = true;
     item.inWishlist = false;
     saveState();
@@ -1278,6 +1281,7 @@
       let item = findItem(String(m.best.id));
       if(!item){ item = mediaToItem(m.best); state.items.push(item); }
       item.inLibrary = true;
+      item.inWishlist = false;
       added++;
     });
     saveState();
