@@ -51,6 +51,10 @@
     --blob-b: rgba(224,41,74,.2);
     --blob-c: rgba(90,110,240,.17);
   }
+  :root{
+    --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+    --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  }
   html{background:var(--bg);}
   body, .banner, .sheet, .btn-icon, .poster, .stat-chip{ transition:background-color .25s, border-color .25s, color .25s; }
   @media (prefers-reduced-motion: reduce){
@@ -108,7 +112,7 @@
   .stat-chip b{color:var(--text); font-size:13px; margin-right:4px;}
 
   main{padding:16px 14px 8px; max-width:640px; margin:0 auto;}
-  main.fade-in{animation:fadeIn .25s ease;}
+  main.fade-in{animation:fadeIn .25s var(--ease-out);}
   @keyframes fadeIn{ from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:translateY(0);} }
 
   .section-label{
@@ -195,15 +199,15 @@
     position:relative; border-radius:16px; overflow:hidden; cursor:pointer;
     aspect-ratio:2/3; background:var(--surface);
     border:1px solid var(--line);
-    transition:transform .2s;
-    opacity:0; animation:popIn .45s cubic-bezier(.2,.8,.2,1) forwards;
-    animation-delay:calc(var(--i, 0) * 45ms);
+    transition:transform .18s var(--ease-out);
+    opacity:0; animation:popIn .45s var(--ease-out) forwards;
+    animation-delay:calc(var(--i, 0) * 40ms);
   }
   @keyframes popIn{
-    from{ opacity:0; transform:scale(.9) translateY(10px); }
+    from{ opacity:0; transform:scale(.96) translateY(11px); }
     to{ opacity:1; transform:scale(1) translateY(0); }
   }
-  .poster:active{transform:scale(.96);}
+  .poster:active{transform:scale(.97);}
   .poster img{position:absolute; inset:0; width:100%; height:100%; object-fit:cover; opacity:0; transition:opacity .35s ease;}
   .poster img.loaded{opacity:1;}
   .poster-placeholder{
@@ -238,6 +242,14 @@
     position:absolute; top:8px; left:8px; background:rgba(0,0,0,.55); color:#fff;
     font-family:'JetBrains Mono'; font-size:8px; padding:2px 6px; border-radius:5px; letter-spacing:.3px;
   }
+
+  /* ---------- Hero: portada volando de la lista a la ficha ---------- */
+  .hero-clone{
+    position:fixed; z-index:60; overflow:hidden; pointer-events:none; will-change:transform;
+    display:flex; align-items:center; justify-content:center; text-align:center; padding:14px; line-height:1.15;
+    font-family:'Bebas Neue', sans-serif; font-size:15px; color:#fff;
+  }
+  .hero-clone img{position:absolute; inset:0; width:100%; height:100%; object-fit:cover;}
 
   /* ---------- Bottom sheet ---------- */
   .sheet-backdrop{
@@ -433,11 +445,23 @@
   .mini-btn{
     font-family:'JetBrains Mono'; font-size:9.5px; text-transform:uppercase; padding:6px 10px;
     border-radius:20px; border:1px solid var(--line); background:var(--surface-2); cursor:pointer; color:var(--text);
-    transition:transform .15s;
+    transition:transform .15s var(--ease-out), background-color .2s, border-color .2s, color .2s;
   }
   .mini-btn:active{transform:scale(.93);}
   .mini-btn.solid{background:var(--text); color:var(--bg); border-color:var(--text); font-weight:700;}
   .mini-btn.added{background:var(--green); border-color:var(--green); color:#0B0B0F; font-weight:700;}
+
+  /* ---------- Wishlist: pop + partículas al activar ---------- */
+  .wish-burst{position:fixed; z-index:70; width:0; height:0; pointer-events:none; transform:translate(-50%,-50%);}
+  .wish-particle{
+    position:absolute; top:0; left:0; width:5px; height:5px; margin:-2.5px; border-radius:50%;
+    background:var(--green); opacity:0; animation:wishParticle .38s var(--ease-out) forwards;
+    animation-delay:var(--pd, 0ms);
+  }
+  @keyframes wishParticle{
+    0%{ transform:translate(0,0) scale(1); opacity:.9; }
+    100%{ transform:translate(var(--dx), var(--dy)) scale(0); opacity:0; }
+  }
 
   .loading{text-align:center; padding:36px; font-family:'JetBrains Mono'; font-size:12px; color:var(--text-soft);}
   .spinner{
@@ -1623,7 +1647,7 @@
     content.innerHTML = `
       <button class="sheet-close" data-action="close-sheet" aria-label="Cerrar">${icon("close",15)}</button>
       <div class="sheet-head">
-        <div style="position:relative; width:88px; height:126px; flex-shrink:0; border-radius:10px; overflow:hidden;">
+        <div id="sheetCoverBox" style="position:relative; width:88px; height:126px; flex-shrink:0; border-radius:10px; overflow:hidden;">
           <div style="position:absolute; inset:0; background:linear-gradient(160deg, ${color}, ${dark}); display:flex; align-items:center; justify-content:center; font-family:'Bebas Neue'; font-size:17px; color:#fff;">${initials}</div>
           ${cover}
         </div>
@@ -1675,11 +1699,12 @@
     `;
   }
 
-  function openSheet(id){
+  function openSheet(id, sourceEl){
     const item = findItem(id);
     if(!item) return;
     openItemId = id;
     renderItemSheet(item);
+    runPosterHero(sourceEl, item);
     showSheet();
   }
   function showSheet(){
@@ -1691,9 +1716,99 @@
     openItemId = null;
     manualCoverData = null; coverUploadTargetId = null; scanResult = null; scanMatches = []; scanSelectedMatch = null; shelfScanMatches = [];
     stopCameraScan();
+    cleanupHeroClone();
     document.getElementById("sheet").classList.remove("open");
     document.getElementById("sheetBackdrop").classList.remove("open");
     document.body.style.overflow = "";
+  }
+
+  /* ---------------- Micro-animaciones ---------------- */
+  function prefersReducedMotion(){
+    return !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+  }
+
+  // Transición "hero": la portada pulsada en la cuadrícula vuela hasta la
+  // portada de la ficha (calculamos su posición final analíticamente, ya que
+  // la ficha todavía está fuera de pantalla — transform:translateY(100%) — en
+  // el momento de medir, así que basta con restar su propia altura).
+  let activeHeroClone = null;
+  function cleanupHeroClone(){
+    if(activeHeroClone){
+      activeHeroClone.remove();
+      activeHeroClone = null;
+    }
+    const coverBox = document.getElementById("sheetCoverBox");
+    if(coverBox) coverBox.style.visibility = "";
+  }
+  function runPosterHero(posterEl, item){
+    cleanupHeroClone();
+    if(!posterEl || !posterEl.classList || !posterEl.classList.contains("poster")) return;
+    if(prefersReducedMotion()) return;
+    const coverBox = document.getElementById("sheetCoverBox");
+    const sheetEl = document.getElementById("sheet");
+    if(!coverBox || !sheetEl) return;
+    const fromRect = posterEl.getBoundingClientRect();
+    if(!fromRect.width || !fromRect.height) return;
+    const coverRect = coverBox.getBoundingClientRect();
+    const toTop = coverRect.top - sheetEl.offsetHeight; // translateY(100%) -> 0% desplaza hacia arriba su propia altura
+    const toLeft = coverRect.left;
+
+    const color = itemColor(item), dark = itemColorDark(item), initials = initialsOf(item.title);
+    const clone = document.createElement("div");
+    clone.className = "hero-clone";
+    clone.style.top = fromRect.top + "px";
+    clone.style.left = fromRect.left + "px";
+    clone.style.width = fromRect.width + "px";
+    clone.style.height = fromRect.height + "px";
+    clone.style.borderRadius = "16px";
+    clone.style.background = `linear-gradient(160deg, ${color}, ${dark})`;
+    clone.innerHTML = `<span>${initials}</span>` + (item.cover ? `<img src="${item.cover}" alt="">` : "");
+    document.body.appendChild(clone);
+    activeHeroClone = clone;
+    coverBox.style.visibility = "hidden";
+
+    const dx = toLeft - fromRect.left;
+    const dy = toTop - fromRect.top;
+    const scaleX = coverRect.width / fromRect.width;
+    const scaleY = coverRect.height / fromRect.height;
+
+    const anim = clone.animate([
+      { transform: "translate(0px,0px) scale(1,1)", borderRadius: "16px" },
+      { transform: `translate(${dx}px,${dy}px) scale(${scaleX},${scaleY})`, borderRadius: "10px" }
+    ], { duration: 340, easing: "cubic-bezier(0.23, 1, 0.32, 1)", fill: "forwards" });
+    anim.onfinish = cleanupHeroClone;
+    anim.oncancel = cleanupHeroClone;
+  }
+
+  // Pop + partículas sutiles al añadir a la wishlist. El botón real se
+  // reemplaza al instante por el re-render, así que el efecto vive en una
+  // capa flotante independiente sobre su posición — y la acción real se
+  // aplaza un frame para que el navegador llegue a pintar el pop.
+  function spawnWishParticles(cx, cy){
+    const burst = document.createElement("div");
+    burst.className = "wish-burst";
+    burst.style.left = cx + "px";
+    burst.style.top = cy + "px";
+    const n = 5;
+    let html = "";
+    for(let i=0;i<n;i++){
+      const angle = (Math.PI*2/n)*i - Math.PI/2;
+      const dx = (Math.cos(angle)*16).toFixed(1);
+      const dy = (Math.sin(angle)*16).toFixed(1);
+      html += `<span class="wish-particle" style="--dx:${dx}px; --dy:${dy}px; --pd:${i*8}ms;"></span>`;
+    }
+    burst.innerHTML = html;
+    document.body.appendChild(burst);
+    setTimeout(()=>burst.remove(), 460);
+  }
+  function playWishPop(triggerEl, onSettled){
+    if(!triggerEl || prefersReducedMotion()){ onSettled(); return; }
+    const rect = triggerEl.getBoundingClientRect();
+    spawnWishParticles(rect.left + rect.width/2, rect.top + rect.height/2);
+    triggerEl.animate([
+      { transform:"scale(1)" }, { transform:"scale(1.12)" }, { transform:"scale(1)" }
+    ], { duration:280, easing:"cubic-bezier(0.23, 1, 0.32, 1)" });
+    requestAnimationFrame(()=> requestAnimationFrame(onSettled));
   }
 
   /* ---------------- Alta manual ---------------- */
@@ -2081,7 +2196,7 @@
   /* ---------------- Event delegation ---------------- */
   document.addEventListener("click", (e)=>{
     const poster = e.target.closest("[data-open]");
-    if(poster){ openSheet(poster.dataset.open); return; }
+    if(poster){ openSheet(poster.dataset.open, poster); return; }
 
     const t = e.target.closest("[data-action]");
     if(!t) return;
@@ -2103,7 +2218,7 @@
     }
     else if(action==="add-wish"){
       const media = searchResultsCache.find(m=>String(m.id)===id);
-      if(media) addToWishlist(media);
+      if(media) playWishPop(t, ()=> addToWishlist(media));
     }
     else if(action==="open-manual") openManualSheet();
     else if(action==="open-barcode") openBarcodeSheet();
