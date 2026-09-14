@@ -1731,11 +1731,21 @@
   // portada de la ficha (calculamos su posición final analíticamente, ya que
   // la ficha todavía está fuera de pantalla — transform:translateY(100%) — en
   // el momento de medir, así que basta con restar su propia altura).
+  // Usa exactamente la misma duración/curva que la propia ficha (.sheet) para
+  // que lleguen sincronizadas — antes iban a ritmos distintos y se notaba
+  // forzado — y una escala uniforme tipo "cover" (recortada con overflow,
+  // no estirada) para que la portada no se deforme durante el vuelo.
+  const SHEET_TRANSITION = { duration: 280, easing: "cubic-bezier(.2,.8,.2,1)" };
   let activeHeroClone = null;
+  let activeHeroSource = null;
   function cleanupHeroClone(){
     if(activeHeroClone){
       activeHeroClone.remove();
       activeHeroClone = null;
+    }
+    if(activeHeroSource){
+      activeHeroSource.style.visibility = "";
+      activeHeroSource = null;
     }
     const coverBox = document.getElementById("sheetCoverBox");
     if(coverBox) coverBox.style.visibility = "";
@@ -1751,7 +1761,6 @@
     if(!fromRect.width || !fromRect.height) return;
     const coverRect = coverBox.getBoundingClientRect();
     const toTop = coverRect.top - sheetEl.offsetHeight; // translateY(100%) -> 0% desplaza hacia arriba su propia altura
-    const toLeft = coverRect.left;
 
     const color = itemColor(item), dark = itemColorDark(item), initials = initialsOf(item.title);
     const clone = document.createElement("div");
@@ -1765,9 +1774,11 @@
     clone.innerHTML = `<span>${initials}</span>` + (item.cover ? `<img src="${item.cover}" alt="">` : "");
     document.body.appendChild(clone);
     activeHeroClone = clone;
+    activeHeroSource = posterEl;
+    posterEl.style.visibility = "hidden";
     coverBox.style.visibility = "hidden";
 
-    const dx = toLeft - fromRect.left;
+    const dx = coverRect.left - fromRect.left;
     const dy = toTop - fromRect.top;
     const scaleX = coverRect.width / fromRect.width;
     const scaleY = coverRect.height / fromRect.height;
@@ -1775,7 +1786,7 @@
     const anim = clone.animate([
       { transform: "translate(0px,0px) scale(1,1)", borderRadius: "16px" },
       { transform: `translate(${dx}px,${dy}px) scale(${scaleX},${scaleY})`, borderRadius: "10px" }
-    ], { duration: 340, easing: "cubic-bezier(0.23, 1, 0.32, 1)", fill: "forwards" });
+    ], { duration: SHEET_TRANSITION.duration, easing: SHEET_TRANSITION.easing, fill: "forwards" });
     anim.onfinish = cleanupHeroClone;
     anim.oncancel = cleanupHeroClone;
   }
