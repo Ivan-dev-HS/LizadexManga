@@ -414,6 +414,30 @@
   .sheet-progress-label{font-family:'JetBrains Mono'; font-size:9.5px; text-transform:uppercase; letter-spacing:.3px; color:var(--text-soft); margin:0 0 3px;}
   .sheet-progress-count{font-weight:700; font-size:15px; margin:0; color:var(--text);}
 
+  .cover-edit-btn{
+    position:absolute; bottom:-4px; right:-4px; width:28px; height:28px; border-radius:50%;
+    background:var(--grad-primary); color:#fff; border:2px solid var(--surface); padding:0;
+    display:flex; align-items:center; justify-content:center; cursor:pointer; box-shadow:var(--shadow-sm);
+    transition:transform .15s var(--ease-out);
+  }
+  .cover-edit-btn:active{transform:scale(.88);}
+
+  /* Secciones plegables (edición, tienda): ocultan detalle secundario por
+     defecto para que la ficha no se sienta como un formulario largo. */
+  .field-group{margin-bottom:14px;}
+  .field-group summary{
+    cursor:pointer; list-style:none; display:flex; align-items:center; justify-content:space-between;
+    padding:12px 14px; background:var(--surface-2); border:1px solid var(--line); border-radius:14px;
+    font-family:'Zen Kaku Gothic New'; font-size:13px; font-weight:700; color:var(--text);
+  }
+  .field-group summary::-webkit-details-marker{display:none;}
+  .field-group summary .chev{display:inline-flex; color:var(--text-soft); transition:transform .2s var(--ease-out); flex-shrink:0;}
+  .field-group[open] summary .chev{transform:rotate(90deg);}
+  .field-group[open] summary{border-radius:14px 14px 0 0; border-bottom:none;}
+  .field-group-body{
+    padding:14px; border:1px solid var(--line); border-top:none; border-radius:0 0 14px 14px; background:var(--surface);
+  }
+
   .tag-row{display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px;}
   .tag{
     font-family:'JetBrains Mono'; font-size:9.5px; text-transform:uppercase; letter-spacing:.3px;
@@ -1941,12 +1965,14 @@
     const cover = item.cover ? `<img class="cover-preview" style="position:absolute; inset:0; width:88px;height:126px;" src="${item.cover}" alt="" onerror="this.style.display='none'">` : "";
     const readVols = item.volumeStates ? item.volumeStates.filter(s=>s===2).length : (item.readCount||0);
     const pct = item.totalVolumes ? Math.round((readVols / item.totalVolumes) * 100) : null;
+    const hasPickup = item.pendingPickup && item.pendingPickup.length;
     content.innerHTML = `
       <button class="sheet-close" data-action="close-sheet" aria-label="Cerrar">${icon("close",15)}</button>
       <div class="sheet-head stagger-item" style="--si:0;">
         <div id="sheetCoverBox" style="position:relative; width:88px; height:126px; flex-shrink:0; border-radius:16px; overflow:hidden; box-shadow:var(--shadow-md);">
           <div style="position:absolute; inset:0; background:linear-gradient(160deg, ${color}, ${dark}); display:flex; align-items:center; justify-content:center; font-family:'Bebas Neue'; font-size:17px; color:#fff;">${initials}</div>
           ${cover}
+          <button class="cover-edit-btn" data-action="pick-cover" data-id="${item.id}" aria-label="Cambiar portada">${icon("camera",13)}</button>
         </div>
         <div style="flex:1; min-width:0;">
           <p class="sheet-title">${item.title}</p>
@@ -1966,44 +1992,51 @@
             <p class="sheet-progress-count">${readVols}/${item.totalVolumes} tomos leídos</p>
           </div>
         </div>` : ""}
-      <div class="sheet-actions stagger-item" style="margin:0 0 14px; --si:2;">
-        <button data-action="pick-cover" data-id="${item.id}">${icon("camera",15)} Cambiar portada</button>
-      </div>
-      <div class="stagger-item" style="--si:3;">
+      <div class="stagger-item" style="--si:2;">
         ${item.inLibrary ? volumeBlock(item) : `<p class="section-sub" style="margin-top:0;">Está en tus favoritos. Cuando la tengas, muévela a biblioteca para llevar el control de tomos.</p>`}
       </div>
-      <div class="stagger-item" style="--si:4;">
-        <span class="field-label">Edición (opcional)</span>
-        <input type="text" class="text-input" list="editionOptions" placeholder="Ej: Deluxe, Omnibus, 3 en 1, Edición limitada…" value="${item.edition||""}" data-action="set-edition" data-id="${item.id}">
-        <datalist id="editionOptions">
-          <option value="Estándar"></option>
-          <option value="Deluxe"></option>
-          <option value="Omnibus"></option>
-          <option value="3 en 1"></option>
-          <option value="Kanzenban"></option>
-          <option value="Edición limitada"></option>
-          <option value="Box set"></option>
-        </datalist>
-        <span class="field-label">Nº de tomos de esta edición</span>
-        <input type="number" min="0" max="300" class="number-input" value="${item.totalVolumes||""}" placeholder="Ej: 36 en vez de 108 si es 3 en 1" data-action="set-edition-volumes" data-id="${item.id}">
-        <p class="field-hint">Cambia este número si tu edición agrupa varios tomos en uno (3 en 1, Kanzenban…) — la app usa el dato original de AniList por defecto, que no coincide con ediciones especiales.</p>
-        <span class="field-label">Tomos pendientes de recoger en tienda</span>
-        ${(item.pendingPickup&&item.pendingPickup.length) ? `
-          <div class="pickup-chip-row">
-            ${item.pendingPickup.map((vol,idx)=>`
-              <span class="pickup-chip">Tomo ${escapeHtml(String(vol))}
-                <button data-action="resolve-pickup" data-id="${item.id}" data-idx="${idx}" title="Ya lo he recogido">${icon("close",11)}</button>
-              </span>`).join("")}
-          </div>` : ""}
-        <div class="pickup-row">
-          <input type="text" class="text-input" id="pickupVolInput" placeholder="Nº de tomo, ej: 45" data-action="pickup-input">
-          <button data-action="add-pickup" data-id="${item.id}">${icon("plus",13)} Añadir</button>
-        </div>
-        <p class="field-hint">Apunta aquí el tomo en cuanto la tienda te avise de que ha llegado; lo verás en Próximos → Tienda hasta que marques que ya lo has recogido.</p>
-        <div class="sheet-actions">
-          ${item.inWishlist ? `<button class="primary" data-action="move-lib" data-id="${item.id}">Ya lo tengo</button>` : ""}
-          <button class="danger" data-action="remove" data-id="${item.id}">Eliminar</button>
-        </div>
+      <div class="stagger-item" style="--si:3;">
+        <details class="field-group">
+          <summary>Edición ${item.edition ? `· ${escapeHtml(item.edition)}` : ""}<span class="chev">${icon("chevronRight",15)}</span></summary>
+          <div class="field-group-body">
+            <span class="field-label" style="margin-top:0;">Edición (opcional)</span>
+            <input type="text" class="text-input" list="editionOptions" placeholder="Ej: Deluxe, Omnibus, 3 en 1…" value="${item.edition||""}" data-action="set-edition" data-id="${item.id}">
+            <datalist id="editionOptions">
+              <option value="Estándar"></option>
+              <option value="Deluxe"></option>
+              <option value="Omnibus"></option>
+              <option value="3 en 1"></option>
+              <option value="Kanzenban"></option>
+              <option value="Edición limitada"></option>
+              <option value="Box set"></option>
+            </datalist>
+            <span class="field-label">Nº de tomos de esta edición</span>
+            <input type="number" min="0" max="300" class="number-input" value="${item.totalVolumes||""}" placeholder="Ej: 36 si tu edición junta varios tomos" data-action="set-edition-volumes" data-id="${item.id}">
+            <p class="field-hint">Solo si tu edición agrupa tomos (3 en 1, Kanzenban…) y no coincide con el dato original.</p>
+          </div>
+        </details>
+        <details class="field-group" ${hasPickup ? "open" : ""}>
+          <summary>Tienda${hasPickup ? ` · ${item.pendingPickup.length} pendiente${item.pendingPickup.length>1?"s":""}` : ""}<span class="chev">${icon("chevronRight",15)}</span></summary>
+          <div class="field-group-body">
+            ${hasPickup ? `
+              <div class="pickup-chip-row" style="margin-top:0;">
+                ${item.pendingPickup.map((vol,idx)=>`
+                  <span class="pickup-chip">Tomo ${escapeHtml(String(vol))}
+                    <button data-action="resolve-pickup" data-id="${item.id}" data-idx="${idx}" title="Ya lo he recogido">${icon("close",11)}</button>
+                  </span>`).join("")}
+              </div>` : ""}
+            <span class="field-label" style="margin-top:0;">Avisarme cuando llegue un tomo</span>
+            <div class="pickup-row">
+              <input type="text" class="text-input" id="pickupVolInput" placeholder="Nº de tomo, ej: 45" data-action="pickup-input">
+              <button data-action="add-pickup" data-id="${item.id}">${icon("plus",13)} Añadir</button>
+            </div>
+            <p class="field-hint">Lo verás también en Perfil → Próximos hasta que marques que ya lo recogiste.</p>
+          </div>
+        </details>
+      </div>
+      <div class="sheet-actions stagger-item" style="--si:4;">
+        ${item.inWishlist ? `<button class="primary" data-action="move-lib" data-id="${item.id}">Ya lo tengo</button>` : ""}
+        <button class="danger" data-action="remove" data-id="${item.id}">Eliminar</button>
       </div>
     `;
   }
