@@ -266,16 +266,55 @@
     text-transform:uppercase; font-weight:700; letter-spacing:.3px; color:var(--primary);
   }
 
+  /* ---------- Inicio: buscador y "ver todo" ---------- */
+  .search-bar-fake{
+    display:flex; align-items:center; gap:9px; width:100%; margin-bottom:18px;
+    padding:13px 16px; border:1.5px solid var(--line); border-radius:16px;
+    background:var(--surface); color:var(--text-soft); cursor:pointer;
+    font-family:'Zen Kaku Gothic New'; font-size:14px; text-align:left;
+    transition:transform .15s var(--ease-out), border-color .2s;
+  }
+  .search-bar-fake:active{transform:scale(.98);}
+  .section-head-row{display:flex; align-items:center; justify-content:space-between; margin:4px 2px 0;}
+  .see-all-link{
+    background:none; border:none; cursor:pointer; display:inline-flex; align-items:center; gap:2px;
+    font-family:'JetBrains Mono'; font-size:10.5px; font-weight:700; text-transform:uppercase;
+    letter-spacing:.3px; color:var(--primary); padding:4px;
+  }
+
+  /* ---------- Perfil ---------- */
+  .profile-head{display:flex; align-items:center; gap:14px; margin-bottom:18px;}
+  .profile-avatar{
+    width:56px; height:56px; border-radius:50%; background:var(--grad-primary); color:#fff;
+    display:flex; align-items:center; justify-content:center; flex-shrink:0; box-shadow:var(--shadow-md);
+  }
+  .profile-name{font-family:'Bebas Neue'; font-size:22px; margin:0; line-height:1;}
+  .profile-sub{font-family:'JetBrains Mono'; font-size:10.5px; color:var(--text-soft); margin:5px 0 0;}
+  .profile-stats{display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:18px;}
+  .profile-stat{
+    text-align:center; background:var(--surface); border:1px solid var(--line); border-radius:16px;
+    padding:12px 6px; box-shadow:var(--shadow-sm);
+    font-family:'JetBrains Mono'; font-size:9px; color:var(--text-soft); text-transform:uppercase;
+  }
+  .profile-stat b{
+    display:block; font-family:'Bebas Neue'; font-size:22px; margin-bottom:2px;
+    background:var(--grad-primary); -webkit-background-clip:text; background-clip:text; color:transparent;
+  }
+  .settings-link-btn{
+    display:flex; align-items:center; gap:10px; width:100%; margin-bottom:22px;
+    padding:13px 14px; border:1px solid var(--line); border-radius:14px; background:var(--surface-2);
+    color:var(--text); font-family:'Zen Kaku Gothic New'; font-size:13.5px; font-weight:700; cursor:pointer;
+    transition:opacity .15s;
+  }
+  .settings-link-btn:active{opacity:.65;}
+
   /* ---------- Poster grid ---------- */
   .grid{display:grid; grid-template-columns:1fr 1fr; gap:14px;}
   @media (min-width:520px){ .grid{grid-template-columns:repeat(3,1fr);} }
   @media (min-width:720px){ .grid{grid-template-columns:repeat(4,1fr); gap:16px;} }
   @media (min-width:1040px){ .grid{grid-template-columns:repeat(5,1fr);} }
   .poster{
-    position:relative; border-radius:20px; overflow:hidden; cursor:pointer;
-    aspect-ratio:2/3; background:var(--surface);
-    border:1px solid var(--line);
-    transition:transform .18s var(--ease-out), box-shadow .25s var(--ease-out);
+    position:relative; cursor:pointer;
     opacity:0; animation:popIn .4s var(--ease-out) forwards;
     animation-delay:calc(var(--i, 0) * 35ms);
   }
@@ -283,29 +322,32 @@
     from{ opacity:0; transform:scale(.94) translateY(12px); }
     to{ opacity:1; transform:scale(1) translateY(0); }
   }
-  .poster:active{transform:scale(.97);}
+  .poster:active .poster-image{transform:scale(.97);}
+  .poster-image{
+    position:relative; border-radius:18px; overflow:hidden;
+    aspect-ratio:2/3; background:var(--surface);
+    border:1px solid var(--line); box-shadow:var(--shadow-md);
+    transition:transform .18s var(--ease-out), box-shadow .25s var(--ease-out);
+  }
   .poster img{position:absolute; inset:0; width:100%; height:100%; object-fit:cover; opacity:0; transition:opacity .35s ease;}
   .poster img.loaded{opacity:1;}
   .poster-placeholder{
     position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
     font-family:'Bebas Neue'; font-size:15px; text-align:center; padding:14px; line-height:1.15; color:#fff;
   }
-  .poster-scrim{
-    position:absolute; left:0; right:0; bottom:0; padding:11px 11px 10px;
-    background:linear-gradient(to top, rgba(0,0,0,.92) 10%, rgba(0,0,0,.55) 58%, transparent 100%);
-  }
+  .poster-body{padding:9px 1px 0;}
   .poster-title{
-    font-weight:700; font-size:12.5px; line-height:1.25; margin:0 0 6px; color:#fff;
+    font-weight:700; font-size:12.5px; line-height:1.25; margin:0 0 6px; color:var(--text);
     display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;
   }
   .poster-tag{
     display:inline-block; font-family:'JetBrains Mono'; font-size:8.5px; text-transform:uppercase;
     letter-spacing:.3px; padding:2px 6px; border-radius:6px; color:#0B0B0F; font-weight:700; margin-bottom:6px;
   }
-  .poster-progress{height:4px; border-radius:3px; background:rgba(255,255,255,.24); overflow:hidden; margin-bottom:4px;}
+  .poster-progress{height:4px; border-radius:3px; background:var(--surface-2); overflow:hidden; margin-bottom:4px;}
   .poster-progress-fill{height:100%; border-radius:3px; background:var(--grad-primary); transition:width .5s cubic-bezier(.2,.8,.2,1);}
   .poster-progress-text{
-    font-family:'JetBrains Mono'; font-size:9px; font-weight:700; color:rgba(255,255,255,.88); letter-spacing:.2px;
+    font-family:'JetBrains Mono'; font-size:9px; font-weight:700; color:var(--text-soft); letter-spacing:.2px;
   }
   .poster-newchip{
     position:absolute; top:9px; right:9px; background:var(--danger); color:#fff;
@@ -317,7 +359,7 @@
     0%,100%{ box-shadow:0 0 0 0 rgba(255,84,112,.55); }
     50%{ box-shadow:0 0 0 5px rgba(255,84,112,0); }
   }
-  .poster-glow{position:absolute; inset:-1px; border-radius:20px; border:2px solid transparent; pointer-events:none;}
+  .poster-glow{position:absolute; inset:-1px; border-radius:18px; border:2px solid transparent; pointer-events:none;}
   .poster-custom-badge{
     position:absolute; top:9px; left:9px; background:rgba(0,0,0,.55); color:#fff;
     font-family:'JetBrains Mono'; font-size:8px; padding:2px 6px; border-radius:6px; letter-spacing:.3px;
@@ -610,10 +652,11 @@
   @media (min-width:720px){ .bottomnav{ max-width:920px; left:50%; right:auto; transform:translateX(-50%); border-radius:24px 24px 0 0; border-left:1px solid var(--line); border-right:1px solid var(--line); } }
   .nav-pill{
     position:absolute; top:4px; bottom:4px; left:0; border-radius:16px;
-    background:var(--surface-2); box-shadow:inset 0 0 0 1px var(--line);
-    transition:transform .32s var(--ease-spring), width .32s var(--ease-spring);
+    background:var(--grad-primary); box-shadow:0 6px 16px -6px rgba(var(--primary-rgb),.6);
+    opacity:0; transition:transform .32s var(--ease-spring), width .32s var(--ease-spring), opacity .2s;
     pointer-events:none; z-index:0;
   }
+  .nav-pill.visible{opacity:1;}
   .bottomnav button{
     background:transparent; border:none; color:var(--text-soft);
     font-family:'JetBrains Mono'; font-size:9.5px; text-transform:uppercase;
@@ -621,7 +664,7 @@
     cursor:pointer; padding:7px 10px; position:relative; z-index:1; transition:color .2s;
     border-radius:16px;
   }
-  .bottomnav button.active{color:var(--primary);}
+  .bottomnav button.active{color:#fff;}
   .bottomnav button.active .ic{animation:navPop .3s var(--ease-spring);}
   @keyframes navPop{ 0%{transform:scale(1);} 45%{transform:scale(1.28);} 100%{transform:scale(1);} }
   .bottomnav .nav-dot{
@@ -672,10 +715,10 @@
 
   <div class="bottomnav">
     <span class="nav-pill" id="navPill"></span>
-    <button class="active" data-tab="library"></button>
+    <button class="active" data-tab="home"></button>
+    <button data-tab="library"></button>
     <button data-tab="wishlist"></button>
-    <button data-tab="upcoming"></button>
-    <button data-tab="search"></button>
+    <button data-tab="profile"></button>
   </div>
 
   <div class="sheet-backdrop" id="sheetBackdrop"></div>
@@ -716,7 +759,11 @@
     moon: '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>',
     plus: '<line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line>',
     grid: '<rect x="3" y="3" width="7" height="7" rx="1.2"></rect><rect x="14" y="3" width="7" height="7" rx="1.2"></rect><rect x="3" y="14" width="7" height="7" rx="1.2"></rect><rect x="14" y="14" width="7" height="7" rx="1.2"></rect>',
-    shelf: '<line x1="3" y1="7" x2="21" y2="7"></line><line x1="3" y1="17" x2="21" y2="17"></line><line x1="6" y1="7" x2="6" y2="17"></line><line x1="12" y1="7" x2="12" y2="17"></line><line x1="18" y1="7" x2="18" y2="17"></line>'
+    shelf: '<line x1="3" y1="7" x2="21" y2="7"></line><line x1="3" y1="17" x2="21" y2="17"></line><line x1="6" y1="7" x2="6" y2="17"></line><line x1="12" y1="7" x2="12" y2="17"></line><line x1="18" y1="7" x2="18" y2="17"></line>',
+    home: '<path d="M3 9l9-7 9 7"></path><polyline points="9 22 9 12 15 12 15 22"></polyline>',
+    heart: '<path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>',
+    user: '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle>',
+    chevronRight: '<polyline points="9 18 15 12 9 6"></polyline>'
   };
   function icon(name, size){
     size = size || 20;
@@ -725,7 +772,7 @@
 
   /* ---------------- State ---------------- */
   let state = loadState();
-  let activeTab = "library";
+  let activeTab = "home";
   let openItemId = null;
   let manualCoverData = null;   // dataURL pendiente para el alta manual
   let coverUploadTargetId = null; // id del item cuya portada se está reemplazando (null = alta manual)
@@ -992,7 +1039,7 @@
     item.inWishlist = true;
     item.inLibrary = false;
     saveState();
-    toast(`"${item.title}" añadido a la wishlist`);
+    toast(`"${item.title}" añadido a favoritos`);
     render();
     return item;
   }
@@ -1467,17 +1514,19 @@
     const row = document.getElementById("statsRow");
     row.innerHTML = `
       <div class="stat-chip"><b>${lib.length}</b>en biblioteca</div>
-      <div class="stat-chip"><b>${wish.length}</b>en wishlist</div>
+      <div class="stat-chip"><b>${wish.length}</b>en favoritos</div>
       <div class="stat-chip"><b>${newChaps}</b>con capítulos nuevos</div>
     `;
-    const hasUpcomingNews = newChaps>0 || lib.some(i=>i.status==="NOT_YET_RELEASED");
-    const navUpcomingBtn = document.querySelector('.bottomnav button[data-tab="upcoming"]');
-    if(navUpcomingBtn){
-      let dot = navUpcomingBtn.querySelector(".nav-dot");
+    // Los avisos de "próximos" (lanzamientos + tomos por recoger) ahora
+    // viven dentro de Perfil, así que el punto de aviso se muestra ahí.
+    const hasUpcomingNews = newChaps>0 || lib.some(i=>i.status==="NOT_YET_RELEASED") || lib.some(i=>i.pendingPickup && i.pendingPickup.length);
+    const navProfileBtn = document.querySelector('.bottomnav button[data-tab="profile"]');
+    if(navProfileBtn){
+      let dot = navProfileBtn.querySelector(".nav-dot");
       if(hasUpcomingNews && !dot){
         dot = document.createElement("span");
         dot.className = "nav-dot";
-        navUpcomingBtn.appendChild(dot);
+        navProfileBtn.appendChild(dot);
       }else if(!hasUpcomingNews && dot){
         dot.remove();
       }
@@ -1495,13 +1544,15 @@
     const readVols = item.volumeStates ? item.volumeStates.filter(s=>s===2).length : item.readCount;
     const pct = item.totalVolumes ? Math.round((readVols / item.totalVolumes) * 100) : null;
     return `
-      <div class="poster" data-open="${item.id}" style="box-shadow:var(--shadow-md), 0 6px 18px -10px ${color}80; --i:${Math.min(idx||0,12)};">
-        <div class="poster-glow" style="border-color:${color}55;"></div>
-        ${placeholder}
-        ${cover}
-        ${item.edition ? `<span class="poster-custom-badge">${item.edition.toUpperCase()}</span>` : (item.source==="custom" ? `<span class="poster-custom-badge">MANUAL</span>` : "")}
-        ${item.newChaptersCount>0 ? `<span class="poster-newchip">+${item.newChaptersCount}</span>` : ""}
-        <div class="poster-scrim">
+      <div class="poster" data-open="${item.id}" style="--i:${Math.min(idx||0,12)};">
+        <div class="poster-image" style="box-shadow:var(--shadow-md), 0 6px 18px -10px ${color}80;">
+          <div class="poster-glow" style="border-color:${color}55;"></div>
+          ${placeholder}
+          ${cover}
+          ${item.edition ? `<span class="poster-custom-badge">${item.edition.toUpperCase()}</span>` : (item.source==="custom" ? `<span class="poster-custom-badge">MANUAL</span>` : "")}
+          ${item.newChaptersCount>0 ? `<span class="poster-newchip">+${item.newChaptersCount}</span>` : ""}
+        </div>
+        <div class="poster-body">
           <span class="poster-tag" style="background:${color};">${statusLabel(item.status)}</span>
           <p class="poster-title">${item.title}</p>
           ${pct!==null ? `
@@ -1624,8 +1675,7 @@
     if(!items.length) return `<div class="empty">${EMPTY_ILLUSTRATION}<b>Tu estantería está vacía</b>Toca el botón + para buscar un manga, escanear un código de barras o añadirlo a mano.</div>`;
     const sorted = items.sort((a,b)=>a.title.localeCompare(b.title));
     const view = getLibraryView();
-    const continueItem = pickContinueItem(items);
-    return `${continueItem ? continueCardHTML(continueItem) : ""}<p class="section-label">Mi biblioteca <span class="count">${items.length}</span></p>
+    return `<p class="section-label">Mi biblioteca <span class="count">${items.length}</span></p>
       ${libraryViewToggleHTML()}
       ${view==="shelf"
         ? renderShelf(sorted)
@@ -1634,9 +1684,58 @@
   }
   function renderWishlist(){
     const items = state.items.filter(i=>i.inWishlist);
-    if(!items.length) return `<div class="empty">${EMPTY_ILLUSTRATION}<b>Ninguna serie en espera</b>Añade aquí los manga que quieres pillar pero todavía no tienes.</div>`;
-    return `<p class="section-label">Wishlist <span class="count">${items.length}</span></p>
+    if(!items.length) return `<div class="empty">${EMPTY_ILLUSTRATION}<b>Ningún favorito todavía</b>Añade aquí los manga que quieres pillar pero todavía no tienes.</div>`;
+    return `<p class="section-label">Favoritos <span class="count">${items.length}</span></p>
       <div class="grid">${items.sort((a,b)=>a.title.localeCompare(b.title)).map((it,idx)=>posterHTML(it,idx)).join("")}</div>`;
+  }
+
+  // Inicio: resumen de un vistazo — buscador, la serie en curso y un
+  // adelanto de la biblioteca con acceso directo a verla completa.
+  function renderHome(){
+    const items = state.items.filter(i=>i.inLibrary);
+    const continueItem = pickContinueItem(items);
+    const searchBar = `<button class="search-bar-fake" data-action="add-via-search">${icon("search",17)} Buscar manga…</button>`;
+
+    if(!items.length){
+      return `${searchBar}<div class="empty">${EMPTY_ILLUSTRATION}<b>Empieza tu colección</b>Toca el botón + para buscar un manga, escanear un código de barras o añadirlo a mano.</div>`;
+    }
+
+    const sorted = items.slice().sort((a,b)=>(b.addedAt||0)-(a.addedAt||0));
+    const preview = sorted.slice(0, 4);
+    return `
+      ${searchBar}
+      ${continueItem ? continueCardHTML(continueItem) : ""}
+      <div class="section-head-row">
+        <p class="section-label" style="margin-bottom:0;">Tu biblioteca</p>
+        <button class="see-all-link" data-action="goto-library">Ver todo ${icon("chevronRight",13)}</button>
+      </div>
+      <div class="grid" style="margin-top:12px;">${preview.map((it,idx)=>posterHTML(it,idx)).join("")}</div>
+    `;
+  }
+
+  // Perfil: identidad de la app, estadísticas rápidas, los avisos de
+  // "próximos" (lanzamientos + tomos por recoger en tienda) y accesos a
+  // los ajustes existentes — sin duplicar esa pantalla en dos sitios.
+  function renderProfile(){
+    const lib = state.items.filter(i=>i.inLibrary);
+    const wish = state.items.filter(i=>i.inWishlist);
+    const readTotal = lib.reduce((sum,i)=> sum + (i.volumeStates ? i.volumeStates.filter(s=>s===2).length : (i.readCount||0)), 0);
+    return `
+      <div class="profile-head">
+        <div class="profile-avatar">${icon("user",26)}</div>
+        <div>
+          <p class="profile-name">Lizadex</p>
+          <p class="profile-sub">Tu colección de manga</p>
+        </div>
+      </div>
+      <div class="profile-stats">
+        <div class="profile-stat"><b>${lib.length}</b>En biblioteca</div>
+        <div class="profile-stat"><b>${wish.length}</b>Favoritos</div>
+        <div class="profile-stat"><b>${readTotal}</b>Tomos leídos</div>
+      </div>
+      <button class="settings-link-btn" data-action="open-menu">${icon("more",18)} Más ajustes y copia de seguridad</button>
+      ${renderUpcoming()}
+    `;
   }
 
   function upThumb(item){
@@ -1667,7 +1766,7 @@
     let html = `<p class="section-label">Próximos lanzamientos</p>`;
     html += `<p class="section-sub">Aquí verás series anunciadas sin publicar, capítulos ya salidos que aún no has leído, y los tomos que hayas marcado como llegados a la tienda.</p>`;
 
-    if(!tracked.length) return html + `<div class="empty">${EMPTY_ILLUSTRATION}<b>Nada que mostrar todavía</b>Añade series a tu biblioteca o wishlist para ver aquí sus novedades.</div>`;
+    if(!tracked.length) return html + `<div class="empty">${EMPTY_ILLUSTRATION}<b>Nada que mostrar todavía</b>Añade series a tu biblioteca o favoritos para ver aquí sus novedades.</div>`;
 
     if(pickupEntries.length){
       html += `<p class="section-label" style="font-size:17px;">Tienda</p>`;
@@ -1737,7 +1836,7 @@
           <span class="tag">${media._source==="jikan" ? "MyAnimeList" : "AniList"}</span>
           <div class="result-actions">
             <button class="mini-btn ${inLib?'added':'solid'}" data-action="add-lib" data-id="${media.id}">${inLib?'En biblioteca ✓':'Tengo'}</button>
-            <button class="mini-btn ${inWish?'added':''}" data-action="add-wish" data-id="${media.id}">${inWish?'En wishlist ✓':'Quiero'}</button>
+            <button class="mini-btn ${inWish?'added':''}" data-action="add-wish" data-id="${media.id}">${inWish?'En favoritos ✓':'Quiero'}</button>
           </div>
         </div>
       </div>`;
@@ -1757,16 +1856,18 @@
 
   function renderActiveTabList(){
     const main = document.getElementById("main");
-    if(activeTab==="library") main.innerHTML = renderLibrary();
+    if(activeTab==="home") main.innerHTML = renderHome();
+    else if(activeTab==="library") main.innerHTML = renderLibrary();
     else if(activeTab==="wishlist") main.innerHTML = renderWishlist();
-    else if(activeTab==="upcoming") main.innerHTML = renderUpcoming();
+    else if(activeTab==="profile") main.innerHTML = renderProfile();
   }
 
   function render(){
     const main = document.getElementById("main");
-    if(activeTab==="library") main.innerHTML = renderLibrary();
+    if(activeTab==="home") main.innerHTML = renderHome();
+    else if(activeTab==="library") main.innerHTML = renderLibrary();
     else if(activeTab==="wishlist") main.innerHTML = renderWishlist();
-    else if(activeTab==="upcoming") main.innerHTML = renderUpcoming();
+    else if(activeTab==="profile") main.innerHTML = renderProfile();
     else if(activeTab==="search"){
       main.innerHTML = renderSearch();
       const resultsEl = document.getElementById("searchResults");
@@ -1869,7 +1970,7 @@
         <button data-action="pick-cover" data-id="${item.id}">${icon("camera",15)} Cambiar portada</button>
       </div>
       <div class="stagger-item" style="--si:3;">
-        ${item.inLibrary ? volumeBlock(item) : `<p class="section-sub" style="margin-top:0;">Está en tu wishlist. Cuando la tengas, muévela a biblioteca para llevar el control de tomos.</p>`}
+        ${item.inLibrary ? volumeBlock(item) : `<p class="section-sub" style="margin-top:0;">Está en tus favoritos. Cuando la tengas, muévela a biblioteca para llevar el control de tomos.</p>`}
       </div>
       <div class="stagger-item" style="--si:4;">
         <span class="field-label">Edición (opcional)</span>
@@ -1965,7 +2066,11 @@
     const coverBox = document.getElementById("sheetCoverBox");
     const sheetEl = document.getElementById("sheet");
     if(!coverBox || !sheetEl) return;
-    const fromRect = posterEl.getBoundingClientRect();
+    // La card ahora tiene la portada arriba y el título/progreso debajo (fuera
+    // de la imagen); el vuelo debe partir solo del recuadro de la portada,
+    // no de la card entera, o se estiraría hasta cubrir también el texto.
+    const imageEl = posterEl.querySelector(".poster-image") || posterEl;
+    const fromRect = imageEl.getBoundingClientRect();
     if(!fromRect.width || !fromRect.height) return;
     const coverRect = coverBox.getBoundingClientRect();
     const toTop = coverRect.top - sheetEl.offsetHeight; // translateY(100%) -> 0% desplaza hacia arriba su propia altura
@@ -1977,7 +2082,7 @@
     clone.style.left = fromRect.left + "px";
     clone.style.width = fromRect.width + "px";
     clone.style.height = fromRect.height + "px";
-    clone.style.borderRadius = "20px";
+    clone.style.borderRadius = "18px";
     clone.style.background = `linear-gradient(160deg, ${color}, ${dark})`;
     clone.innerHTML = `<span>${initials}</span>` + (item.cover ? `<img src="${item.cover}" alt="">` : "");
     document.body.appendChild(clone);
@@ -1992,7 +2097,7 @@
     const scaleY = coverRect.height / fromRect.height;
 
     const anim = clone.animate([
-      { transform: "translate(0px,0px) scale(1,1)", borderRadius: "20px" },
+      { transform: "translate(0px,0px) scale(1,1)", borderRadius: "18px" },
       { transform: `translate(${dx}px,${dy}px) scale(${scaleX},${scaleY})`, borderRadius: "16px" }
     ], { duration: SHEET_TRANSITION.duration, easing: SHEET_TRANSITION.easing, fill: "forwards" });
     anim.onfinish = cleanupHeroClone;
@@ -2056,7 +2161,7 @@
       <span class="field-label">¿Dónde lo añado?</span>
       <select class="select-input" id="manualDestination">
         <option value="library">A mi biblioteca (ya lo tengo)</option>
-        <option value="wishlist">A la wishlist (lo quiero)</option>
+        <option value="wishlist">A favoritos (lo quiero)</option>
       </select>
       <div class="sheet-actions">
         <button class="primary" data-action="manual-save">Guardar</button>
@@ -2341,10 +2446,10 @@
     document.getElementById("fabBtn").innerHTML = icon("plus", 24);
 
     const navDefs = [
+      { tab: "home", label: "Inicio", ic: "home" },
       { tab: "library", label: "Biblioteca", ic: "book" },
-      { tab: "wishlist", label: "Wishlist", ic: "star" },
-      { tab: "upcoming", label: "Próximos", ic: "calendar" },
-      { tab: "search", label: "Buscar", ic: "search" }
+      { tab: "wishlist", label: "Favoritos", ic: "heart" },
+      { tab: "profile", label: "Perfil", ic: "user" }
     ];
     document.querySelectorAll(".bottomnav button").forEach(btn=>{
       const def = navDefs.find(d=>d.tab===btn.dataset.tab);
@@ -2365,7 +2470,13 @@
     const nav = document.querySelector(".bottomnav");
     const pill = document.getElementById("navPill");
     const active = document.querySelector(".bottomnav button.active");
-    if(!nav || !pill || !active) return;
+    if(!nav || !pill) return;
+    // La pantalla de búsqueda no tiene pestaña propia en el nav (se abre
+    // desde el buscador de Inicio), así que ninguna quedará marcada como
+    // activa mientras estemos ahí: ocultamos la cápsula en vez de dejarla
+    // clavada en la última posición.
+    if(!active){ pill.classList.remove("visible"); return; }
+    pill.classList.add("visible");
     if(!navPillPositioned){ pill.style.transition = "none"; }
     const navRect = nav.getBoundingClientRect();
     const btnRect = active.getBoundingClientRect();
@@ -2507,6 +2618,13 @@
     }
     else if(action==="toggle-theme") toggleTheme();
     else if(action==="set-view") setLibraryView(t.dataset.view);
+    else if(action==="open-menu") openMenuSheet();
+    else if(action==="goto-library"){
+      activeTab = "library";
+      syncBottomNav();
+      render();
+      window.scrollTo(0,0);
+    }
     else if(action==="add-via-search"){
       closeSheet();
       activeTab = "search";
