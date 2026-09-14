@@ -31,6 +31,7 @@
     --line:#2A2A33;
     --danger:#FF5470;
     --green:#4ADE9C;
+    --amber:#FFC24B;
     --blob-a: rgba(74,222,156,.32);
     --blob-b: rgba(255,84,112,.3);
     --blob-c: rgba(124,140,255,.2);
@@ -45,6 +46,7 @@
     --line:#E6E1D6;
     --danger:#E0294A;
     --green:#0A9D63;
+    --amber:#B45F06;
     --blob-a: rgba(14,157,104,.22);
     --blob-b: rgba(224,41,74,.2);
     --blob-c: rgba(90,110,240,.17);
@@ -314,6 +316,24 @@
   .sheet-actions button.primary{background:var(--green); color:#0B0B0F; border-color:var(--green); font-weight:700;}
   .sheet-actions button.danger{color:var(--danger); border-color:var(--danger);}
 
+  .pickup-row{display:flex; gap:8px; margin-top:8px;}
+  .pickup-row .text-input{flex:1;}
+  .pickup-row button{
+    flex-shrink:0; padding:0 14px; border-radius:10px; border:1px solid var(--amber);
+    background:var(--amber); color:#171008; font-weight:700; font-size:12px;
+    display:flex; align-items:center; gap:5px; cursor:pointer;
+  }
+  .pickup-chip-row{display:flex; flex-wrap:wrap; gap:8px; margin-top:10px;}
+  .pickup-chip{
+    display:flex; align-items:center; gap:6px; padding:6px 6px 6px 12px; border-radius:20px;
+    background:color-mix(in srgb, var(--amber) 18%, transparent); border:1px solid var(--amber);
+    font-family:'JetBrains Mono'; font-size:11px; color:var(--text); font-weight:600;
+  }
+  .pickup-chip button{
+    width:20px; height:20px; border-radius:50%; border:none; background:var(--amber); color:#171008;
+    display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; padding:0;
+  }
+
   .cover-picker{
     display:flex; align-items:center; gap:12px; margin-bottom:4px;
   }
@@ -550,17 +570,31 @@
   let scanMatches = [];         // resultados de AniList tras la búsqueda
   let scanSelectedMatch = null;
 
+  // Antes había un único aviso "llegado a la tienda" por serie (booleano);
+  // ahora es una lista de tomos concretos por serie. Si alguien tenía ese
+  // aviso activado, lo convertimos en un tomo pendiente genérico para no
+  // perder el aviso silenciosamente.
+  function migratePickupField(data){
+    (data.items||[]).forEach(i=>{
+      if(i.pickupReady && !(i.pendingPickup && i.pendingPickup.length)){
+        i.pendingPickup = ["pendiente"];
+      }
+      delete i.pickupReady;
+    });
+    return data;
+  }
+
   function loadState(){
     try{
       const raw = localStorage.getItem(STORE_KEY);
-      if(raw) return JSON.parse(raw);
+      if(raw) return migratePickupField(JSON.parse(raw));
       // migración desde versiones anteriores
       for(const legacyKey of ["tomo_manga_data_v2","tomo_manga_data_v1"]){
         const legacy = localStorage.getItem(legacyKey);
         if(legacy){
           const parsed = JSON.parse(legacy);
           (parsed.items||[]).forEach(i=>{ i.id = String(i.id); i.source = i.source || "anilist"; });
-          return parsed;
+          return migratePickupField(parsed);
         }
       }
     }catch(e){ console.warn("No se pudo leer el almacenamiento local", e); }
@@ -774,7 +808,7 @@
       manualNote: "",
       edition: "",
       newChaptersCount: 0,
-      pickupReady: false,
+      pendingPickup: [],
       addedAt: Date.now()
     };
   }
@@ -865,17 +899,40 @@
     render();
   }
 
-  // Marca manual de "ha llegado a la tienda, ir a recoger" -no hay ninguna
-  // integración automática con WhatsApp ni con nada (ver conversación: no
-  // existe API para leer mensajes personales), así que lo activa/desactiva
-  // el propio usuario al ver el aviso de su tienda.
-  function togglePickupReady(id){
+  // Marca manual de "este tomo ha llegado a la tienda, ir a recogerlo" — no
+  // hay ninguna integración automática con la tienda, lo apunta el propio
+  // usuario al ver el aviso. Se guarda por tomo (no por serie entera) porque
+  // pueden llegar varios tomos de la misma serie en momentos distintos.
+  function addPendingPickup(id){
     const item = findItem(id);
     if(!item) return;
-    item.pickupReady = !item.pickupReady;
+    const inputEl = document.getElementById("pickupVolInput");
+    const val = (inputEl.value||"").trim();
+    if(!val) return;
+    item.pendingPickup = item.pendingPickup || [];
+    item.pendingPickup.push(val);
+    inputEl.value = "";
     saveState();
     if(openItemId===id) renderItemSheet(item);
     if(activeTab==="upcoming") renderActiveTabList();
+    toast(`Tomo ${val} apuntado como pendiente de recoger`);
+  }
+
+  function resolvePendingPickup(id, idx){
+    const item = findItem(id);
+    if(!item || !item.pendingPickup || !item.pendingPickup.length) return;
+    const vol = item.pendingPickup[idx];
+    item.pendingPickup.splice(idx, 1);
+    // Si el nº de tomo coincide con una casilla del grid, la marca como
+    // comprada de paso — ya no hay que ir a por ella, ya la tienes.
+    const n = parseInt(vol, 10);
+    if(item.volumeStates && Number.isFinite(n) && n>=1 && n<=item.volumeStates.length){
+      if(item.volumeStates[n-1] < 1) item.volumeStates[n-1] = 1;
+    }
+    saveState();
+    if(openItemId===id) renderItemSheet(item);
+    if(activeTab==="upcoming") renderActiveTabList();
+    toast(`Tomo ${vol} recogido`);
   }
 
   async function refreshAll(){
@@ -1225,7 +1282,7 @@
         const parsed = JSON.parse(reader.result);
         if(!parsed || !Array.isArray(parsed.items)) throw new Error("formato inválido");
         parsed.items.forEach(i=>{ i.id = String(i.id); i.source = i.source || "anilist"; });
-        state = parsed;
+        state = migratePickupField(parsed);
         saveState();
         render();
         toast("Copia importada correctamente");
@@ -1392,24 +1449,28 @@
     // mostrarse en el resto de secciones de próximos lanzamientos: la
     // información relevante ahora es que hay que ir a recogerla, no cuándo
     // sale el siguiente tomo.
-    const readyForPickup = tracked.filter(i=>i.pickupReady);
-    const rest = tracked.filter(i=>!i.pickupReady);
+    const pickupEntries = [];
+    tracked.forEach(i=>{
+      (i.pendingPickup||[]).forEach((vol, idx)=> pickupEntries.push({ item:i, vol, idx }));
+    });
+    const withPickup = new Set(pickupEntries.map(e=>e.item.id));
+    const rest = tracked.filter(i=>!withPickup.has(i.id));
     const notYet = rest.filter(i=>i.status==="NOT_YET_RELEASED");
     const withNew = rest.filter(i=>i.newChaptersCount>0);
 
     let html = `<p class="section-label">Próximos lanzamientos</p>`;
-    html += `<p class="section-sub">Aquí verás series anunciadas sin publicar, capítulos ya salidos que aún no has leído, y las que hayas marcado como llegadas a la tienda.</p>`;
+    html += `<p class="section-sub">Aquí verás series anunciadas sin publicar, capítulos ya salidos que aún no has leído, y los tomos que hayas marcado como llegados a la tienda.</p>`;
 
     if(!tracked.length) return html + `<div class="empty">${EMPTY_ILLUSTRATION}<b>Nada que mostrar todavía</b>Añade series a tu biblioteca o wishlist para ver aquí sus novedades.</div>`;
 
-    if(readyForPickup.length){
+    if(pickupEntries.length){
       html += `<p class="section-label" style="font-size:17px;">Tienda</p>`;
-      html += readyForPickup.map(i => `
-        <div class="up-item" style="--_accent:var(--green)">${upThumb(i)}
+      html += pickupEntries.map(({item:i, vol, idx}) => `
+        <div class="up-item" style="--_accent:var(--amber)">${upThumb(i)}
           <div style="flex:1">
-            <div class="up-date" style="color:var(--green)">Recoger<small>Llegado a la tienda</small></div>
+            <div class="up-date" style="color:var(--amber)">Recoger<small>Tomo ${escapeHtml(String(vol))} · en tienda</small></div>
             <p class="up-title">${i.title}</p>
-            <button class="mini-btn" data-action="toggle-pickup" data-id="${i.id}">Ya lo he recogido</button>
+            <button class="mini-btn" data-action="resolve-pickup" data-id="${i.id}" data-idx="${idx}">Ya lo he recogido</button>
           </div>
         </div>`).join("");
     }
@@ -1594,9 +1655,19 @@
       <span class="field-label">Nº de tomos de esta edición</span>
       <input type="number" min="0" max="300" class="number-input" value="${item.totalVolumes||""}" placeholder="Ej: 36 en vez de 108 si es 3 en 1" data-action="set-edition-volumes" data-id="${item.id}">
       <p class="field-hint">Cambia este número si tu edición agrupa varios tomos en uno (3 en 1, Kanzenban…) — la app usa el dato original de AniList por defecto, que no coincide con ediciones especiales.</p>
-      ${item.pickupReady
-        ? `<button class="newchap" style="background:var(--green); color:#0B0B0F; width:100%; justify-content:center;" data-action="toggle-pickup" data-id="${item.id}">${icon("download",13)} Ha llegado a la tienda · marcar como recogido</button>`
-        : `<div class="sheet-actions" style="margin-top:8px;"><button data-action="toggle-pickup" data-id="${item.id}">${icon("download",15)} Marcar como llegado a la tienda</button></div>`}
+      <span class="field-label">Tomos pendientes de recoger en tienda</span>
+      ${(item.pendingPickup&&item.pendingPickup.length) ? `
+        <div class="pickup-chip-row">
+          ${item.pendingPickup.map((vol,idx)=>`
+            <span class="pickup-chip">Tomo ${escapeHtml(String(vol))}
+              <button data-action="resolve-pickup" data-id="${item.id}" data-idx="${idx}" title="Ya lo he recogido">${icon("close",11)}</button>
+            </span>`).join("")}
+        </div>` : ""}
+      <div class="pickup-row">
+        <input type="text" class="text-input" id="pickupVolInput" placeholder="Nº de tomo, ej: 45" data-action="pickup-input">
+        <button data-action="add-pickup" data-id="${item.id}">${icon("plus",13)} Añadir</button>
+      </div>
+      <p class="field-hint">Apunta aquí el tomo en cuanto la tienda te avise de que ha llegado; lo verás en Próximos → Tienda hasta que marques que ya lo has recogido.</p>
       <div class="sheet-actions">
         ${item.inWishlist ? `<button class="primary" data-action="move-lib" data-id="${item.id}">Ya lo tengo</button>` : ""}
         <button class="danger" data-action="remove" data-id="${item.id}">Eliminar</button>
@@ -1686,7 +1757,7 @@
       manualNote: "",
       edition: "",
       newChaptersCount: 0,
-      pickupReady: false,
+      pendingPickup: [],
       addedAt: Date.now()
     };
     state.items.push(item);
@@ -2021,7 +2092,8 @@
     else if(action==="inc") bumpCounter(id, t.dataset.field, 1);
     else if(action==="dec") bumpCounter(id, t.dataset.field, -1);
     else if(action==="dismiss-chap"){ dismissNewChapters(id); if(openItemId===id) closeSheet(); }
-    else if(action==="toggle-pickup") togglePickupReady(id);
+    else if(action==="add-pickup") addPendingPickup(id);
+    else if(action==="resolve-pickup") resolvePendingPickup(id, Number(t.dataset.idx));
     else if(action==="remove") removeItem(id);
     else if(action==="move-lib") moveToLibrary(id);
     else if(action==="close-sheet") closeSheet();
@@ -2090,6 +2162,11 @@
 
   document.getElementById("sheetBackdrop").addEventListener("click", closeSheet);
   document.addEventListener("keydown", (e)=>{ if(e.key==="Escape") closeSheet(); });
+  document.addEventListener("keydown", (e)=>{
+    if(e.key==="Enter" && e.target && e.target.dataset && e.target.dataset.action==="pickup-input" && openItemId){
+      addPendingPickup(openItemId);
+    }
+  });
 
   document.addEventListener("change", (e)=>{
     const t = e.target;
