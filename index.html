@@ -356,14 +356,6 @@
     font-family:'JetBrains Mono'; font-size:8px; padding:2px 6px; border-radius:6px; letter-spacing:.3px;
   }
 
-  /* ---------- Hero: portada volando de la lista a la ficha ---------- */
-  .hero-clone{
-    position:fixed; z-index:60; overflow:hidden; pointer-events:none; will-change:transform;
-    display:flex; align-items:center; justify-content:center; text-align:center; padding:14px; line-height:1.15;
-    font-family:'Bebas Neue', sans-serif; font-size:15px; color:#fff;
-  }
-  .hero-clone img{position:absolute; inset:0; width:100%; height:100%; object-fit:cover;}
-
   /* ---------- Bottom sheet ---------- */
   .sheet-backdrop{
     position:fixed; inset:0; background:rgba(10,6,20,.55); backdrop-filter:blur(3px); z-index:50;
@@ -371,7 +363,7 @@
   }
   .sheet-backdrop.open{opacity:1; pointer-events:auto;}
   .sheet{
-    position:fixed; left:0; right:0; bottom:0; z-index:51; max-height:88vh;
+    position:fixed; left:0; right:0; bottom:0; z-index:51; max-height:88vh; overflow:hidden;
     background:var(--surface); border-radius:26px 26px 0 0; border-top:1px solid var(--line);
     box-shadow:0 -20px 50px -20px rgba(var(--shadow-color),.35);
     transform:translateY(100%); transition:transform .28s cubic-bezier(.2,.8,.2,1);
@@ -2077,8 +2069,7 @@
     if(!item) return;
     openItemId = id;
     renderItemSheet(item);
-    runPosterHero(sourceEl, item);
-    showSheet();
+    runSheetExpand(sourceEl);
   }
   function showSheet(){
     document.getElementById("sheet").classList.add("open");
@@ -2089,7 +2080,8 @@
     openItemId = null;
     manualCoverData = null; coverUploadTargetId = null; scanResult = null; scanMatches = []; scanSelectedMatch = null; shelfScanMatches = [];
     stopCameraScan();
-    cleanupHeroClone();
+    restoreExpandSource();
+    if(activeExpandAnim){ activeExpandAnim.cancel(); activeExpandAnim = null; }
     document.getElementById("sheet").classList.remove("open");
     document.getElementById("sheetBackdrop").classList.remove("open");
     document.body.style.overflow = "";
@@ -2100,76 +2092,63 @@
     return !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
   }
 
-  // Transición "hero": la portada pulsada en la cuadrícula vuela hasta la
-  // portada de la ficha (calculamos su posición final analíticamente, ya que
-  // la ficha todavía está fuera de pantalla — transform:translateY(100%) — en
-  // el momento de medir, así que basta con restar su propia altura).
-  // Usa exactamente la misma duración/curva que la propia ficha (.sheet) para
-  // que lleguen sincronizadas — antes iban a ritmos distintos y se notaba
-  // forzado — y una escala uniforme tipo "cover" (recortada con overflow,
-  // no estirada) para que la portada no se deforme durante el vuelo.
-  const SHEET_TRANSITION = { duration: 280, easing: "cubic-bezier(.2,.8,.2,1)" };
-  let activeHeroClone = null;
-  let activeHeroSource = null;
-  function cleanupHeroClone(){
-    if(activeHeroClone){
-      activeHeroClone.remove();
-      activeHeroClone = null;
+  // Apertura expansiva: en vez de volar una copia de la portada por
+  // separado (frágil de sincronizar y fácil que se note forzado), la
+  // propia ficha "revienta" desde el sitio y tamaño exactos de la card
+  // tocada hasta su tamaño final — técnica FLIP: fijamos la ficha ya en
+  // su posición final, la arrancamos visualmente encogida sobre la card
+  // de origen (transform+radio), y dejamos que la transición la lleve a
+  // su estado real (transform:none). Un solo elemento animando, sin
+  // relación de aspecto que cuadrar entre dos formas distintas.
+  // Usamos la Web Animations API (element.animate) en vez de alternar la
+  // transición CSS por estilo en línea: intentarlo con transition+reflow
+  // forzado resultó frágil (la propia transición declarada de .sheet para
+  // abrirse competía con la nuestra y el navegador terminaba saltándose
+  // casi toda la animación). Un Animation de WAAPI tiene prioridad propia
+  // sobre la cascada mientras corre, así que no hay conflicto posible.
+  let activeExpandSource = null;
+  let activeExpandAnim = null;
+  function restoreExpandSource(){
+    if(activeExpandSource){
+      activeExpandSource.style.visibility = "";
+      activeExpandSource = null;
     }
-    if(activeHeroSource){
-      activeHeroSource.style.visibility = "";
-      activeHeroSource = null;
-    }
-    const coverBox = document.getElementById("sheetCoverBox");
-    if(coverBox) coverBox.style.visibility = "";
   }
-  function runPosterHero(posterEl, item){
-    cleanupHeroClone();
-    if(!posterEl || !posterEl.classList || !posterEl.classList.contains("poster")) return;
-    if(prefersReducedMotion()) return;
-    const coverBox = document.getElementById("sheetCoverBox");
+  function runSheetExpand(posterEl){
+    restoreExpandSource();
+    if(activeExpandAnim){ activeExpandAnim.cancel(); activeExpandAnim = null; }
     const sheetEl = document.getElementById("sheet");
-    if(!coverBox || !sheetEl) return;
-    // La card ahora tiene la portada arriba y el título/progreso debajo (fuera
-    // de la imagen); el vuelo debe partir solo del recuadro de la portada,
-    // no de la card entera, o se estiraría hasta cubrir también el texto.
-    const imageEl = posterEl.querySelector(".poster-image") || posterEl;
-    const fromRect = imageEl.getBoundingClientRect();
-    if(!fromRect.width || !fromRect.height) return;
-    // El destino es el marco vertical interior (misma proporción 2:3 que la
-    // card de origen), no el banner panorámico completo — así el vuelo es
-    // un simple escalado sin deformar la portada.
-    const frameEl = coverBox.querySelector(".sheet-hero-frame") || coverBox;
-    const coverRect = frameEl.getBoundingClientRect();
-    const toTop = coverRect.top - sheetEl.offsetHeight; // translateY(100%) -> 0% desplaza hacia arriba su propia altura
+    const canExpand = posterEl && posterEl.classList && posterEl.classList.contains("poster") && !prefersReducedMotion();
+    let fromRect = null, imageEl = null;
+    if(canExpand){
+      imageEl = posterEl.querySelector(".poster-image") || posterEl;
+      const r = imageEl.getBoundingClientRect();
+      if(r.width && r.height) fromRect = r;
+    }
+    showSheet();
+    if(!fromRect) return;
 
-    const color = itemColor(item), dark = itemColorDark(item), initials = initialsOf(item.title);
-    const clone = document.createElement("div");
-    clone.className = "hero-clone";
-    clone.style.top = fromRect.top + "px";
-    clone.style.left = fromRect.left + "px";
-    clone.style.width = fromRect.width + "px";
-    clone.style.height = fromRect.height + "px";
-    clone.style.borderRadius = "18px";
-    clone.style.background = `linear-gradient(160deg, ${color}, ${dark})`;
-    clone.innerHTML = `<span>${initials}</span>` + (item.cover ? `<img src="${item.cover}" alt="">` : "");
-    document.body.appendChild(clone);
-    activeHeroClone = clone;
-    activeHeroSource = posterEl;
-    posterEl.style.visibility = "hidden";
-    coverBox.style.visibility = "hidden";
+    const toRect = sheetEl.getBoundingClientRect();
+    if(!toRect.width || !toRect.height) return;
+    const scaleX = fromRect.width / toRect.width;
+    const scaleY = fromRect.height / toRect.height;
+    const dx = (fromRect.left + fromRect.width/2) - (toRect.left + toRect.width/2);
+    const dy = (fromRect.top + fromRect.height/2) - (toRect.top + toRect.height/2);
 
-    const dx = coverRect.left - fromRect.left;
-    const dy = toTop - fromRect.top;
-    const scaleX = coverRect.width / fromRect.width;
-    const scaleY = coverRect.height / fromRect.height;
+    imageEl.style.visibility = "hidden";
+    activeExpandSource = imageEl;
 
-    const anim = clone.animate([
-      { transform: "translate(0px,0px) scale(1,1)", borderRadius: "18px" },
-      { transform: `translate(${dx}px,${dy}px) scale(${scaleX},${scaleY})`, borderRadius: "16px" }
-    ], { duration: SHEET_TRANSITION.duration, easing: SHEET_TRANSITION.easing, fill: "forwards" });
-    anim.onfinish = cleanupHeroClone;
-    anim.oncancel = cleanupHeroClone;
+    const anim = sheetEl.animate([
+      { transform: `translate(${dx}px, ${dy}px) scale(${scaleX}, ${scaleY})`, borderRadius: "20px", opacity: 0.5 },
+      { transform: "translate(0px, 0px) scale(1, 1)", borderRadius: "26px 26px 0px 0px", opacity: 1 }
+    ], { duration: 420, easing: "cubic-bezier(.16,.8,.24,1)", fill: "forwards" });
+    activeExpandAnim = anim;
+    const onDone = ()=>{
+      restoreExpandSource();
+      if(activeExpandAnim === anim){ anim.cancel(); activeExpandAnim = null; }
+    };
+    anim.onfinish = onDone;
+    anim.oncancel = ()=>{ restoreExpandSource(); };
   }
 
   // Pop + partículas sutiles al añadir a la wishlist. El botón real se
