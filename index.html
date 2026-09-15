@@ -2081,7 +2081,7 @@
     manualCoverData = null; coverUploadTargetId = null; scanResult = null; scanMatches = []; scanSelectedMatch = null; shelfScanMatches = [];
     stopCameraScan();
     restoreExpandSource();
-    if(activeExpandAnim){ activeExpandAnim.cancel(); activeExpandAnim = null; }
+    cancelExpandAnims();
     document.getElementById("sheet").classList.remove("open");
     document.getElementById("sheetBackdrop").classList.remove("open");
     document.body.style.overflow = "";
@@ -2107,16 +2107,20 @@
   // casi toda la animación). Un Animation de WAAPI tiene prioridad propia
   // sobre la cascada mientras corre, así que no hay conflicto posible.
   let activeExpandSource = null;
-  let activeExpandAnim = null;
+  let activeExpandAnims = [];
   function restoreExpandSource(){
     if(activeExpandSource){
       activeExpandSource.style.visibility = "";
       activeExpandSource = null;
     }
   }
+  function cancelExpandAnims(){
+    activeExpandAnims.forEach(a=>a.cancel());
+    activeExpandAnims = [];
+  }
   function runSheetExpand(posterEl){
     restoreExpandSource();
-    if(activeExpandAnim){ activeExpandAnim.cancel(); activeExpandAnim = null; }
+    cancelExpandAnims();
     const sheetEl = document.getElementById("sheet");
     const canExpand = posterEl && posterEl.classList && posterEl.classList.contains("poster") && !prefersReducedMotion();
     let fromRect = null, imageEl = null;
@@ -2138,17 +2142,26 @@
     imageEl.style.visibility = "hidden";
     activeExpandSource = imageEl;
 
-    const anim = sheetEl.animate([
-      { transform: `translate(${dx}px, ${dy}px) scale(${scaleX}, ${scaleY})`, borderRadius: "20px", opacity: 0.5 },
-      { transform: "translate(0px, 0px) scale(1, 1)", borderRadius: "26px 26px 0px 0px", opacity: 1 }
+    // Dos animaciones independientes en vez de una sola con varias
+    // propiedades: así el desvanecimiento (más corto, curva suave) no
+    // queda atado a la curva rápida del escalado — cada una se nota como
+    // lo que es en vez de mezclarse en un único ritmo difícil de ajustar.
+    const scaleAnim = sheetEl.animate([
+      { transform: `translate(${dx}px, ${dy}px) scale(${scaleX}, ${scaleY})`, borderRadius: "20px" },
+      { transform: "translate(0px, 0px) scale(1, 1)", borderRadius: "26px 26px 0px 0px" }
     ], { duration: 420, easing: "cubic-bezier(.16,.8,.24,1)", fill: "forwards" });
-    activeExpandAnim = anim;
+    const fadeAnim = sheetEl.animate([
+      { opacity: 0 },
+      { opacity: 1 }
+    ], { duration: 260, easing: "ease-out", fill: "forwards" });
+    activeExpandAnims = [scaleAnim, fadeAnim];
+
     const onDone = ()=>{
       restoreExpandSource();
-      if(activeExpandAnim === anim){ anim.cancel(); activeExpandAnim = null; }
+      cancelExpandAnims();
     };
-    anim.onfinish = onDone;
-    anim.oncancel = ()=>{ restoreExpandSource(); };
+    scaleAnim.onfinish = onDone;
+    scaleAnim.oncancel = ()=>{ restoreExpandSource(); };
   }
 
   // Pop + partículas sutiles al añadir a la wishlist. El botón real se
