@@ -366,15 +366,16 @@
     position:fixed; left:0; right:0; bottom:0; z-index:51; max-height:88vh; overflow:hidden;
     background:var(--surface); border-radius:26px 26px 0 0; border-top:1px solid var(--line);
     box-shadow:0 -20px 50px -20px rgba(var(--shadow-color),.35);
-    /* Al estilo de macOS al abrir una app: crece suavemente y se
-       desvanece hacia dentro, en vez de deslizarse desde fuera de la
-       pantalla — sin depender de la posición de ningún elemento de
-       origen, así que no hay medidas ni sincronización que puedan fallar. */
-    transform:scale(.92); transform-origin:50% 100%; opacity:0; pointer-events:none;
-    transition:transform .32s cubic-bezier(.2,.8,.2,1), opacity .26s ease;
+    /* La opacidad la lleva esta transición CSS simple (universal, para
+       cualquier sheet). El "genio" — escalar desde el punto exacto donde
+       tocaste, con su rebote elástico — lo lleva aparte un WAAPI Animation
+       sobre transform (ver runGenieOpen): así ninguna de las dos compite
+       con la otra por la misma propiedad. */
+    opacity:0; pointer-events:none;
+    transition:opacity .22s ease;
     display:flex; flex-direction:column; padding-bottom:env(safe-area-inset-bottom);
   }
-  .sheet.open{transform:scale(1); opacity:1; pointer-events:auto;}
+  .sheet.open{opacity:1; pointer-events:auto;}
   .sheet-handle{
     position:absolute; top:10px; left:50%; transform:translateX(-50%); z-index:2;
     width:36px; height:4px; background:rgba(140,140,155,.6); border-radius:3px;
@@ -2069,12 +2070,13 @@
     `;
   }
 
-  function openSheet(id){
+  function openSheet(id, posterEl){
     const item = findItem(id);
     if(!item) return;
     openItemId = id;
     renderItemSheet(item);
     showSheet();
+    runGenieOpen(posterEl);
   }
   function showSheet(){
     document.getElementById("sheet").classList.add("open");
@@ -2085,6 +2087,7 @@
     openItemId = null;
     manualCoverData = null; coverUploadTargetId = null; scanResult = null; scanMatches = []; scanSelectedMatch = null; shelfScanMatches = [];
     stopCameraScan();
+    cancelGenieAnim();
     document.getElementById("sheet").classList.remove("open");
     document.getElementById("sheetBackdrop").classList.remove("open");
     document.body.style.overflow = "";
@@ -2094,10 +2097,51 @@
   function prefersReducedMotion(){
     return !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
   }
-  // La apertura de la ficha (crecer + desvanecerse, al estilo de abrir una
-  // app en macOS) vive enteramente en la transición CSS de .sheet.open —
-  // no depende de la card que se tocó ni de ninguna medida en JS, así que
-  // no hay nada que sincronizar ni que se pueda desalinear.
+  // Efecto "genio": la ficha brota del punto exacto donde tocaste (como el
+  // efecto Genie de macOS al minimizar/restaurar una ventana al Dock),
+  // inflándose con un ligero rebote elástico en vez de escalar de forma
+  // uniforme y sosa. La opacidad la lleva la transición CSS de .sheet.open
+  // (arriba); esto solo anima `transform`, así que nunca compiten por la
+  // misma propiedad.
+  let activeGenieAnim = null;
+  function cancelGenieAnim(){
+    if(activeGenieAnim){ activeGenieAnim.cancel(); activeGenieAnim = null; }
+  }
+  function runGenieOpen(posterEl){
+    cancelGenieAnim();
+    const sheetEl = document.getElementById("sheet");
+    if(prefersReducedMotion()) return;
+
+    let originX = null, originY = null;
+    if(posterEl && posterEl.classList && posterEl.classList.contains("poster")){
+      const imageEl = posterEl.querySelector(".poster-image") || posterEl;
+      const r = imageEl.getBoundingClientRect();
+      if(r.width && r.height){ originX = r.left + r.width/2; originY = r.top + r.height/2; }
+    }
+    const sheetRect = sheetEl.getBoundingClientRect();
+    if(!sheetRect.width || !sheetRect.height) return;
+    // Si no venimos de una card (p.ej. la card destacada de Inicio), el
+    // genio sale del centro del borde superior del propio sheet — sigue
+    // pareciendo que "brota", solo que sin un punto de origen concreto.
+    const originXRel = originX!==null ? (originX - sheetRect.left) : (sheetRect.width/2);
+    const originYRel = originY!==null ? (originY - sheetRect.top) : 0;
+    sheetEl.style.transformOrigin = `${originXRel}px ${originYRel}px`;
+
+    const anim = sheetEl.animate([
+      { transform: "scale(0.04, 0.04)" },
+      { transform: "scale(0.5, 0.34)" },
+      { transform: "scale(1.08, 0.88)" },
+      { transform: "scale(0.96, 1.04)" },
+      { transform: "scale(1, 1)" }
+    ], { duration: 560, easing: "ease-in-out", fill: "forwards" });
+    activeGenieAnim = anim;
+    const onDone = ()=>{
+      if(activeGenieAnim === anim){ anim.cancel(); activeGenieAnim = null; }
+      sheetEl.style.transformOrigin = "";
+    };
+    anim.onfinish = onDone;
+    anim.oncancel = ()=>{ sheetEl.style.transformOrigin = ""; };
+  }
 
   // Pop + partículas sutiles al añadir a la wishlist. El botón real se
   // reemplaza al instante por el re-render, así que el efecto vive en una
@@ -2546,7 +2590,7 @@
   /* ---------------- Event delegation ---------------- */
   document.addEventListener("click", (e)=>{
     const poster = e.target.closest("[data-open]");
-    if(poster){ openSheet(poster.dataset.open); return; }
+    if(poster){ openSheet(poster.dataset.open, poster); return; }
 
     const t = e.target.closest("[data-action]");
     if(!t) return;
