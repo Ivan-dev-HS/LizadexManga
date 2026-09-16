@@ -459,6 +459,13 @@
   .sheet-progress-label{font-family:'JetBrains Mono'; font-size:9.5px; text-transform:uppercase; letter-spacing:.3px; color:var(--text-soft); margin:0 0 3px;}
   .sheet-progress-count{font-weight:700; font-size:15px; margin:0; color:var(--text);}
 
+  .next-buy-banner{
+    display:flex; align-items:center; gap:10px; margin-bottom:16px; padding:11px 14px;
+    border-radius:14px; background:var(--grad-primary); color:#fff;
+    font-family:'Zen Kaku Gothic New'; font-size:13px; font-weight:600;
+  }
+  .next-buy-banner b{font-weight:800;}
+
   .sheet-quick-actions{display:flex; gap:8px; margin-bottom:18px;}
   .quick-action{
     flex:1; display:flex; flex-direction:column; align-items:center; gap:6px;
@@ -1732,6 +1739,15 @@
   function readVolsOf(item){
     return item.volumeStates ? item.volumeStates.filter(s=>s===2).length : (item.readCount||0);
   }
+  function nextVolumeToBuy(item){
+    if(item.volumeStates){
+      const idx = item.volumeStates.findIndex(s=>s===0);
+      return idx===-1 ? null : idx+1;
+    }
+    const owned = item.ownedCount||0;
+    if(item.totalVolumes && owned>=item.totalVolumes) return null;
+    return owned+1;
+  }
   function sortItems(items, sortKey){
     const arr = items.slice();
     if(sortKey==="recent") arr.sort((a,b)=>(b.addedAt||0)-(a.addedAt||0));
@@ -2146,6 +2162,7 @@
     const readVols = item.volumeStates ? item.volumeStates.filter(s=>s===2).length : (item.readCount||0);
     const pct = item.totalVolumes ? Math.round((readVols / item.totalVolumes) * 100) : null;
     const hasPickup = item.pendingPickup && item.pendingPickup.length;
+    const nextBuy = item.inLibrary ? nextVolumeToBuy(item) : null;
     content.innerHTML = `
       <button class="sheet-close" data-action="close-sheet" aria-label="Cerrar">${icon("close",15)}</button>
       <div id="sheetCoverBox" class="sheet-hero stagger-item" style="--si:0;">
@@ -2171,6 +2188,11 @@
             <p class="sheet-progress-label">Progreso de lectura</p>
             <p class="sheet-progress-count">${readVols}/${item.totalVolumes} tomos leídos</p>
           </div>
+        </div>` : ""}
+      ${nextBuy ? `
+        <div class="next-buy-banner stagger-item" style="--si:2;">
+          ${icon("shelf",16)}
+          <span>Próximo tomo a comprar: <b>Tomo ${nextBuy}</b></span>
         </div>` : ""}
       <div class="sheet-quick-actions stagger-item" style="--si:3;">
         <button class="quick-action" data-action="pick-cover" data-id="${item.id}">
