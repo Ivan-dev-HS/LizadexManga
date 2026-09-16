@@ -5,13 +5,17 @@
 <script>
   try{
     var t = localStorage.getItem("tomo_theme");
-    document.documentElement.setAttribute("data-theme", (t==="dark"||t==="light") ? t : "light");
+    var resolved;
+    if(t==="dark" || t==="light") resolved = t;
+    else if(t==="auto") resolved = (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) ? "dark" : "light";
+    else resolved = "light";
+    document.documentElement.setAttribute("data-theme", resolved);
   }catch(e){ document.documentElement.setAttribute("data-theme","light"); }
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="theme-color" content="#FAF7F2" id="themeColorMeta">
+<meta name="theme-color" content="#FAF8FD" id="themeColorMeta">
 <title>Lizadex — Mi Manga</title>
 <link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
@@ -733,11 +737,17 @@
 
   .toast{
     position:fixed; left:50%; bottom:100px; transform:translateX(-50%);
-    background:var(--text); color:var(--bg); padding:10px 18px; border-radius:20px;
+    background:var(--text); color:var(--bg); padding:10px 12px 10px 18px; border-radius:20px;
     font-family:'JetBrains Mono'; font-size:12px; font-weight:700; z-index:99; opacity:0; pointer-events:none;
     transition:opacity .25s, bottom .25s; max-width:86%; text-align:center;
+    display:flex; align-items:center; gap:10px; justify-content:center;
   }
-  .toast.show{opacity:1; bottom:114px;}
+  .toast.show{opacity:1; bottom:114px; pointer-events:auto;}
+  .toast-action{
+    background:var(--grad-primary); border:none; color:#fff; border-radius:20px; padding:5px 12px;
+    font-family:'JetBrains Mono'; font-size:11px; font-weight:700;
+    text-transform:uppercase; cursor:pointer; white-space:nowrap; flex-shrink:0;
+  }
 
   #fileImport, #manualCoverInput, #shelfPhotoInput{display:none;}
 </style>
@@ -773,7 +783,10 @@
   <input type="file" id="manualCoverInput" accept="image/*">
   <input type="file" id="shelfPhotoInput" accept="image/*">
 
-  <div class="toast" id="toast"></div>
+  <div class="toast" id="toast">
+    <span id="toastMsg"></span>
+    <button id="toastAction" class="toast-action" hidden></button>
+  </div>
 
 <script>
 (function(){
@@ -861,12 +874,28 @@
     renderStats();
   }
 
-  function toast(msg){
+  let toastActionHandler = null;
+  function toast(msg, opts){
     const t = document.getElementById("toast");
-    t.textContent = msg;
+    document.getElementById("toastMsg").textContent = msg;
+    const actionBtn = document.getElementById("toastAction");
+    if(opts && opts.actionLabel && opts.onAction){
+      actionBtn.textContent = opts.actionLabel;
+      actionBtn.hidden = false;
+      toastActionHandler = opts.onAction;
+    }else{
+      actionBtn.hidden = true;
+      toastActionHandler = null;
+    }
     t.classList.add("show");
     clearTimeout(toast._h);
-    toast._h = setTimeout(()=>t.classList.remove("show"), 2400);
+    const duration = (opts && opts.duration) || 2400;
+    const onExpire = opts && opts.onExpire;
+    toast._h = setTimeout(()=>{
+      t.classList.remove("show");
+      toastActionHandler = null;
+      if(onExpire) onExpire();
+    }, duration);
   }
 
   /* ---------------- Color identity per series ---------------- */
@@ -890,23 +919,45 @@
     return currentTheme()==="light" ? `hsl(${hue} 75% 36%)` : `hsl(${hue} 80% 64%)`;
   }
 
-  /* ---------------- Tema claro / oscuro ---------------- */
+  /* ---------------- Tema claro / oscuro / automático ---------------- */
   const THEME_STORE = "tomo_theme";
   function currentTheme(){
     return document.documentElement.getAttribute("data-theme") || "light";
   }
-  function applyTheme(theme){
-    document.documentElement.setAttribute("data-theme", theme);
-    localStorage.setItem(THEME_STORE, theme);
+  // La preferencia guardada puede ser "light", "dark" o "auto"; currentTheme()
+  // sigue devolviendo siempre el tema YA RESUELTO ("light"/"dark") que se
+  // aplicó al <html>, para no tocar el resto del código que ya lo usa así.
+  function themePref(){
+    const saved = localStorage.getItem(THEME_STORE);
+    return (saved === "dark" || saved === "light" || saved === "auto") ? saved : "light";
+  }
+  function systemPrefersDark(){
+    return !!(window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
+  }
+  function resolveTheme(pref){
+    return pref === "auto" ? (systemPrefersDark() ? "dark" : "light") : pref;
+  }
+  function applyTheme(pref){
+    localStorage.setItem(THEME_STORE, pref);
+    const resolved = resolveTheme(pref);
+    document.documentElement.setAttribute("data-theme", resolved);
     const meta = document.getElementById("themeColorMeta");
-    if(meta) meta.setAttribute("content", theme==="light" ? "#FAF7F2" : "#0B0B0F");
+    if(meta) meta.setAttribute("content", resolved==="light" ? "#FAF8FD" : "#131019");
   }
   function initTheme(){
-    const saved = localStorage.getItem(THEME_STORE);
-    applyTheme(saved === "dark" || saved === "light" ? saved : "light");
+    applyTheme(themePref());
+    if(window.matchMedia){
+      window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", ()=>{
+        if(themePref()==="auto"){
+          applyTheme("auto");
+          render();
+          if(openItemId==="menu") openMenuSheet();
+        }
+      });
+    }
   }
-  function toggleTheme(){
-    applyTheme(currentTheme()==="light" ? "dark" : "light");
+  function setThemePref(pref){
+    applyTheme(pref);
     render();
     if(openItemId==="menu") openMenuSheet();
   }
@@ -1085,14 +1136,34 @@
     render();
     return item;
   }
+  // El borrado se aplica al instante (así el resto de la app y el propio
+  // localStorage quedan consistentes ya mismo), pero guardamos el item y su
+  // posición un rato por si el usuario pulsa "Deshacer" en el toast.
+  let pendingRemoval = null;
   function removeItem(id){
     const item = findItem(id);
     if(!item) return;
+    const idx = state.items.indexOf(item);
     state.items = state.items.filter(i => i.id !== id);
+    pendingRemoval = { item, idx };
     saveState();
     closeSheet();
     render();
-    toast(`"${item.title}" eliminado`);
+    toast(`"${item.title}" eliminado`, {
+      actionLabel: "Deshacer",
+      duration: 5000,
+      onAction: undoRemoveItem,
+      onExpire: ()=>{ pendingRemoval = null; }
+    });
+  }
+  function undoRemoveItem(){
+    if(!pendingRemoval) return;
+    const { item, idx } = pendingRemoval;
+    pendingRemoval = null;
+    state.items.splice(Math.min(idx, state.items.length), 0, item);
+    saveState();
+    render();
+    toast(`"${item.title}" restaurado`);
   }
   function moveToLibrary(id){
     const item = findItem(id);
@@ -2529,12 +2600,17 @@
   function openMenuSheet(){
     openItemId = "menu";
     const content = document.getElementById("sheetContent");
-    const isLight = currentTheme()==="light";
+    const pref = themePref();
     content.innerHTML = `
       <button class="sheet-close" data-action="close-sheet" aria-label="Cerrar">${icon("close",15)}</button>
       <p class="sheet-heading">Más opciones</p>
       <button class="menu-item" data-action="do-refresh">${icon("refresh",19)} Actualizar desde AniList</button>
-      <button class="menu-item" data-action="toggle-theme">${icon(isLight ? "moon" : "sun",19)} ${isLight ? "Modo oscuro" : "Modo claro"}</button>
+      <span class="field-label" style="margin-top:0;">Apariencia</span>
+      <div class="view-toggle" style="margin-bottom:16px;">
+        <button class="${pref==='light'?'active':''}" data-action="set-theme" data-theme-pref="light">${icon("sun",15)} Claro</button>
+        <button class="${pref==='dark'?'active':''}" data-action="set-theme" data-theme-pref="dark">${icon("moon",15)} Oscuro</button>
+        <button class="${pref==='auto'?'active':''}" data-action="set-theme" data-theme-pref="auto">${icon("refresh",15)} Auto</button>
+      </div>
       <button class="menu-item" data-action="do-export">${icon("download",19)} Exportar copia de seguridad</button>
       <button class="menu-item" data-action="do-import">${icon("upload",19)} Importar copia de seguridad</button>
       <button class="menu-item" data-action="do-about">${icon("info",19)} Acerca de Lizadex</button>
@@ -2655,7 +2731,7 @@
       input.value = "";
       input.click();
     }
-    else if(action==="toggle-theme") toggleTheme();
+    else if(action==="set-theme") setThemePref(t.dataset.themePref);
     else if(action==="set-view") setLibraryView(t.dataset.view);
     else if(action==="open-menu") openMenuSheet();
     else if(action==="toggle-detail"){
@@ -2736,6 +2812,13 @@
   });
 
   document.getElementById("fabBtn").addEventListener("click", openAddSheet);
+  document.getElementById("toastAction").addEventListener("click", ()=>{
+    const handler = toastActionHandler;
+    toastActionHandler = null;
+    document.getElementById("toast").classList.remove("show");
+    clearTimeout(toast._h);
+    if(handler) handler();
+  });
   document.getElementById("fileImport").addEventListener("change", (e)=>{
     if(e.target.files[0]) importData(e.target.files[0]);
     e.target.value = "";
