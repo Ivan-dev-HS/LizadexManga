@@ -1914,7 +1914,13 @@
   function renderProfile(){
     const lib = state.items.filter(i=>i.inLibrary);
     const wish = state.items.filter(i=>i.inWishlist);
-    const readTotal = lib.reduce((sum,i)=> sum + (i.volumeStates ? i.volumeStates.filter(s=>s===2).length : (i.readCount||0)), 0);
+    const readTotal = lib.reduce((sum,i)=> sum + readVolsOf(i), 0);
+    const withTotal = lib.filter(i=>i.totalVolumes);
+    const completedCount = withTotal.filter(i=>readVolsOf(i)>=i.totalVolumes).length;
+    const avgProgress = withTotal.length
+      ? Math.round(withTotal.reduce((sum,i)=> sum + (readVolsOf(i)/i.totalVolumes*100), 0) / withTotal.length)
+      : 0;
+    const pendingPickupTotal = lib.reduce((sum,i)=> sum + (i.pendingPickup ? i.pendingPickup.length : 0), 0);
     return `
       <div class="profile-head">
         <div class="profile-avatar">${icon("user",26)}</div>
@@ -1927,6 +1933,9 @@
         <div class="profile-stat"><b>${lib.length}</b>En biblioteca</div>
         <div class="profile-stat"><b>${wish.length}</b>Favoritos</div>
         <div class="profile-stat"><b>${readTotal}</b>Tomos leídos</div>
+        <div class="profile-stat"><b>${completedCount}</b>Series completas</div>
+        <div class="profile-stat"><b>${avgProgress}%</b>Progreso medio</div>
+        <div class="profile-stat"><b>${pendingPickupTotal}</b>Por recoger</div>
       </div>
       <button class="settings-link-btn" data-action="open-menu">${icon("more",18)} Más ajustes y copia de seguridad</button>
       ${renderUpcoming()}
