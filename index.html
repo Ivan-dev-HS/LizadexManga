@@ -2952,6 +2952,12 @@
     if(banner) banner.classList.toggle("scrolled", window.scrollY > 24);
   }, { passive: true });
 
+  if("serviceWorker" in navigator){
+    window.addEventListener("load", ()=>{
+      navigator.serviceWorker.register("sw.js").catch(()=>{});
+    });
+  }
+
   initTheme();
   initChrome();
   render();
